@@ -181,11 +181,19 @@ public final class VarbinaryFunctions
         return Slices.wrappedBuffer(result);
     }
 
-    @Description("Decode hex encoded binary data")
+    @Description("Decode hex encoded binary data. The hex data can optionally be prefixed with '0x'")
     @ScalarFunction("from_hex")
     @LiteralParameters("x")
     @SqlType(StandardTypes.VARBINARY)
     public static Slice fromHexVarchar(@SqlType("varchar(x)") Slice slice)
+    {
+        if (slice.length() >= 2 && slice.getByte(0) == '0' && slice.getByte(1) == 'x') {
+            return fromHexVarcharInternal(slice.slice(2, slice.length() - 2));
+        }
+        return fromHexVarcharInternal(slice);
+    }
+
+    private static Slice fromHexVarcharInternal(Slice slice)
     {
         int resultLength = slice.length() / 2;
         if (resultLength * 2 != slice.length()) {

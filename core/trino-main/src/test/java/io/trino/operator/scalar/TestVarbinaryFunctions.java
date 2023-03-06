@@ -417,6 +417,17 @@ public class TestVarbinaryFunctions
     }
 
     @Test
+    public void testFromHexDune()
+    {
+        assertThat(assertions.function("from_hex", "'0xd7ccc7b8ec095644db35a1ac2dc58104294927c3'"))
+                .isEqualTo(sqlVarbinaryFromHex("D7CCC7B8EC095644DB35A1AC2DC58104294927C3"));
+        assertThat(assertions.function("from_hex", "'0x1234567890abcdefABCDEF'"))
+                .isEqualTo(sqlVarbinaryFromHex("1234567890ABCDEFABCDEF"));
+        assertThat(assertions.function("from_hex", "'0x'"))
+                .isEqualTo(sqlVarbinaryFromHex(""));
+    }
+
+    @Test
     public void testToBigEndian64()
     {
         assertThat(assertions.function("to_big_endian_64", "0"))
