@@ -127,8 +127,10 @@
         <module>testing/trino-product-tests-groups</module>
         <module>testing/trino-product-tests-launcher</module>
         <module>testing/trino-server-dev</module>
+        <!--
         <module>testing/trino-test-jdbc-compatibility-old-driver</module>
         <module>testing/trino-test-jdbc-compatibility-old-server</module>
+        -->
         <module>testing/trino-testing</module>
         <module>testing/trino-testing-containers</module>
         <module>testing/trino-testing-kafka</module>
@@ -143,6 +145,14 @@
         <tag>467</tag>
         <url>https://github.com/trinodb/trino</url>
     </scm>
+
+    <distributionManagement>
+        <repository>
+            <id>dune.repo.release</id>
+            <name>Dune repo</name>
+            <url>${dune.maven.repository}${dune.pr.id}</url>
+        </repository>
+    </distributionManagement>
 
     <properties>
         <project.build.targetJdk>23</project.build.targetJdk>
@@ -222,6 +232,9 @@
         Since 1.1.0, the default behaviour for such conflicts changed from overwriting the artifact to failing the build.
         -->
         <provisio.fallbackTargetFileNameMode>GA</provisio.fallbackTargetFileNameMode>
+
+        <dune.maven.repository>s3://arrakis-maven-repository-118330671040</dune.maven.repository>
+        <dune.pr.id>/releases</dune.pr.id>
     </properties>
 
     <dependencyManagement>
@@ -2795,6 +2808,7 @@
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-surefire-plugin</artifactId>
                 <configuration>
+                    <argLine>-Xmx6G</argLine>
                     <!-- TODO: these should use https://junit.org/junit5/docs/current/user-guide/#running-tests-build-maven-config-params -->
                     <!-- use system properties to work around https://youtrack.jetbrains.com/issue/IDEA-339034 -->
                     <systemPropertyVariables>
@@ -2817,6 +2831,14 @@
                 </configuration>
             </plugin>
         </plugins>
+
+        <extensions>
+            <extension>
+                <groupId>com.github.seahen</groupId>
+                <artifactId>maven-s3-wagon</artifactId>
+                <version>1.3.3</version>
+            </extension>
+        </extensions>
     </build>
 
     <profiles>

@@ -1,6 +1,9 @@
 #!/bin/bash
 set -euo pipefail
 
+# Dune-specific: we do not need nor want this script to execute on our Github runners
+exit 0
+
 function list_installed_packages()
 {
     apt list --installed "$1" 2>/dev/null | awk -F'/' 'NR>1{print $1}'

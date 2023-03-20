@@ -1,0 +1,102 @@
+name: dune
+
+on:
+  pull_request:
+    types:
+      # default
+      - opened
+      - reopened
+      - synchronize # new pushes to PR
+    paths-ignore:
+      - 'docs/**'
+
+defaults:
+  run:
+    shell: bash --noprofile --norc -euo pipefail {0}
+
+env:
+  # An envar that signals to tests we are executing in the CI environment
+  CONTINUOUS_INTEGRATION: true
+  # allow overriding Maven command
+  MAVEN: ./mvnw
+  MAVEN_OPTS: "-Xmx3G -XX:+ExitOnOutOfMemoryError"
+  # Testcontainers kills image pulls if they don't make progress for > 30s and retries for 2m before failing. This means
+  # that if an image doesn't download all it's layers within ~2m then any other concurrent pull will be killed because
+  # the Docker daemon only downloads 3 layers concurrently which prevents the other pull from making any progress.
+  # This value should be greater than the time taken for the longest image pull.
+  TESTCONTAINERS_PULL_PAUSE_TIMEOUT: 600
+  TEST_REPORT_RETENTION_DAYS: 5
+
+# Cancel previous PR builds.
+concurrency:
+  # Cancel all workflow runs except latest within a concurrency group. This is achieved by defining a concurrency group for the PR.
+  # Non-PR builds have singleton concurrency groups.
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.event.number || github.sha }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-publish-packages-and-images:
+    permissions:
+      id-token: write
+      contents: read
+    runs-on: [self-hosted, linux, trino]
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { java-version: 23, cache: 'true'}
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # checkout all commits, as the build result depends on `git describe` equivalent
+          ref: |
+            ${{ github.event_name == 'repository_dispatch' &&
+                github.event.client_payload.pull_request.head.sha == github.event.client_payload.slash_command.args.named.sha &&
+                format('refs/pull/{0}/head', github.event.client_payload.pull_request.number) || '' }}
+      - uses: ./.github/actions/setup
+        timeout-minutes: 10
+        with:
+          cache: ${{ matrix.cache }}
+          java-version: ${{ matrix.java-version }}
+          cleanup-node: true
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v1.7.0
+        with:
+          role-to-assume: arn:aws:iam::118330671040:role/trino-ci
+          aws-region: eu-west-1
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v1.5.3
+      - name: Maven Install
+        run: |
+          $MAVEN clean install -B --strict-checksums -V -T 1C -DskipTests -P ci -pl '!:trino-server-rpm'
+      - name: Get PR labels
+        id: pr-labels
+        uses: joerick/pr-labels-action@v1.0.6
+      - name: Generate image tag
+        if: ${{ contains(steps.pr-labels.outputs.labels, ' publish-artifacts ') }}
+        env:
+            BRANCH_NAME: "${{ github.ref == 'refs/heads/main' && 'main' || github.head_ref }}"
+        run: echo "GENERATED_IMAGE_TAG=$(date -u +%Y-%m-%dT%H-%M-%S)-${BRANCH_NAME}-${GITHUB_SHA:0:7}" >> $GITHUB_ENV
+      - name: Maven Deploy
+        if: ${{ contains(steps.pr-labels.outputs.labels, ' publish-artifacts ') }}
+        run: |
+            $MAVEN deploy -Ddune.pr.id="/prs/${GENERATED_IMAGE_TAG}" -DskipTests=true
+      - name: Clean Maven Output
+        run: $MAVEN clean -pl '!:trino-server,!:trino-cli'
+      - uses: docker/setup-qemu-action@v3
+        if: ${{ contains(steps.pr-labels.outputs.labels, ' publish-artifacts ') }}
+        with:
+          platforms: arm64
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+        with:
+          install: true
+      - name: Build Docker Image
+        if: ${{ contains(steps.pr-labels.outputs.labels, ' publish-artifacts ') }}
+        run: core/docker/build.sh
+      - name: Remove Trino from local Maven repo to avoid caching it
+        # Avoid caching artifacts built in this job, cache should only include dependencies
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: rm -rf ~/.m2/repository/io/trino/trino-*

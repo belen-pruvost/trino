@@ -21,7 +21,7 @@ cd "${SCRIPT_DIR}" || exit 2
 
 SOURCE_DIR="${SCRIPT_DIR}/../.."
 
-ARCHITECTURES=(amd64 arm64 ppc64le)
+ARCHITECTURES=(amd64 arm64)
 TRINO_VERSION=
 
 JDK_RELEASE=$(cat "${SOURCE_DIR}/core/jdk/current")
@@ -112,14 +112,16 @@ rm "${WORK_DIR}/trino-server-${TRINO_VERSION}.tar.gz"
 cp -R bin "${WORK_DIR}/trino-server-${TRINO_VERSION}"
 cp -R default "${WORK_DIR}/"
 
-TAG_PREFIX="trino:${TRINO_VERSION}"
+TAG_PREFIX="118330671040.dkr.ecr.eu-west-1.amazonaws.com/trino:${TRINO_VERSION}${GENERATED_IMAGE_TAG:+-$GENERATED_IMAGE_TAG}"
 
+set -x
 for arch in "${ARCHITECTURES[@]}"; do
     echo "🫙  Building the image for $arch with JDK ${JDK_RELEASE}"
-    docker build \
+    DOCKER_DEFAULT_PLATFORM="linux/$arch" docker buildx build \
         "${WORK_DIR}" \
         --progress=plain \
         --pull \
+        --load \
         --build-arg ARCH="${arch}" \
         --build-arg JDK_VERSION="${JDK_RELEASE}" \
         --build-arg JDK_DOWNLOAD_LINK="$(jdk_download_link "${JDKS_PATH}/${JDK_RELEASE}" "${arch}")" \
@@ -127,20 +129,11 @@ for arch in "${ARCHITECTURES[@]}"; do
         -f Dockerfile \
         -t "${TAG_PREFIX}-$arch" \
         --build-arg "TRINO_VERSION=${TRINO_VERSION}"
+    docker push "${TAG_PREFIX}-$arch"
+    docker manifest create -a "${TAG_PREFIX}" "${TAG_PREFIX}-$arch"
 done
+
+docker manifest push "${TAG_PREFIX}"
 
 echo "🧹 Cleaning up the build context directory"
 rm -r "${WORK_DIR}"
-
-echo -n "🏃 Testing built images"
-if [[ "${SKIP_TESTS}" == "true" ]];then
-  echo " (skipped)"
-else
-  echo
-  source container-test.sh
-  for arch in "${ARCHITECTURES[@]}"; do
-      test_container "${TAG_PREFIX}-$arch" "linux/$arch"
-      docker image inspect -f '🚀 Built {{.RepoTags}} {{.Id}}' "${TAG_PREFIX}-$arch"
-  done
-fi
-

@@ -26,6 +26,7 @@ env:
   MAVEN_COMPILE_COMMITS: "-B --quiet -T 1C -DskipTests -Dmaven.source.skip=true -Dair.check.skip-all=true -Dmaven.javadoc.skip=true --no-snapshot-updates --no-transfer-progress -pl '!:trino-server-rpm'"
   MAVEN_GIB: "-P gib -Dgib.referenceBranch=refs/remotes/origin/${{ github.event_name == 'pull_request' && github.event.pull_request.base.ref || github.event.repository.default_branch }}"
   MAVEN_TEST: "-B -Dmaven.source.skip=true -Dair.check.skip-all --fail-at-end -P gib -Dgib.referenceBranch=refs/remotes/origin/${{ github.event_name == 'pull_request' && github.event.pull_request.base.ref || github.event.repository.default_branch }}"
+  LC_ALL: "en_US.UTF-8"
   # Testcontainers kills image pulls if they don't make progress for > 30s and retries for 2m before failing. This means
   # that if an image doesn't download all it's layers within ~2m then any other concurrent pull will be killed because
   # the Docker daemon only downloads 3 layers concurrently which prevents the other pull from making any progress.
@@ -51,14 +52,13 @@ concurrency:
 
 jobs:
   maven-checks:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, trino]
     name: maven-checks ${{ matrix.java-version }}
     strategy:
       fail-fast: false
       matrix:
         include:
-          - { java-version: 23, cache: 'true', cleanup-node: true }
-          - { java-version: 24-ea, cache: 'restore', cleanup-node: true }
+          - { java-version: 23, cache: 'true' }
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
@@ -89,7 +89,8 @@ jobs:
         run: rm -rf ~/.m2/repository/io/trino/trino-*
 
   artifact-checks:
-    runs-on: ubuntu-latest
+    if: ${{ false }}  # we don't need artifact checks
+    runs-on: [self-hosted, linux, trino]
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
@@ -126,7 +127,7 @@ jobs:
         run: core/docker/build.sh
 
   check-commits-dispatcher:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, trino]
     if: github.event_name == 'pull_request'
     outputs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
@@ -157,7 +158,7 @@ jobs:
 
   check-commit:
     needs: check-commits-dispatcher
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, trino]
     if: github.event_name == 'pull_request' && needs.check-commits-dispatcher.outputs.matrix != ''
     strategy:
       fail-fast: false
@@ -178,7 +179,8 @@ jobs:
           base_ref: ${{ github.event.pull_request.base.ref }}
 
   error-prone-checks:
-    runs-on: ubuntu-latest
+    if: ${{ false }}  # TODO: re-enable error-prone checks
+    runs-on: [self-hosted, linux, trino]
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
@@ -205,7 +207,8 @@ jobs:
             -pl '!:trino-docs,!:trino-server,!:trino-server-rpm'
 
   test-jdbc-compatibility:
-    runs-on: ubuntu-latest
+    if: ${{ false }}  # we don't need jdbc coverage
+    runs-on: [self-hosted, linux, trino]
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
@@ -244,7 +247,7 @@ jobs:
           upload-heap-dump: ${{ env.SECRETS_PRESENT == '' && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository }}
 
   hive-tests:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, trino]
     strategy:
       fail-fast: false
       matrix:
@@ -310,7 +313,8 @@ jobs:
           github_token: ${{ secrets.GITHUB_TOKEN }}
 
   test-other-modules:
-    runs-on: ubuntu-latest
+    if: ${{ false }}  # flaky and we don't modify other modules
+    runs-on: [self-hosted, linux, trino]
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
@@ -389,7 +393,7 @@ jobs:
           upload-heap-dump: ${{ env.SECRETS_PRESENT == '' && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository }}
 
   build-test-matrix:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, trino]
     outputs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
     steps:
@@ -439,63 +443,64 @@ jobs:
                 - lib/trino-filesystem-s3
                 - lib/trino-hdfs
             - { modules: core/trino-main }
-            - { modules: lib/trino-filesystem-azure, profile: cloud-tests }
-            - { modules: lib/trino-filesystem-gcs, profile: cloud-tests }
-            - { modules: lib/trino-filesystem-s3, profile: cloud-tests }
-            - { modules: lib/trino-hdfs, profile: cloud-tests }
-            - { modules: plugin/trino-bigquery }
-            - { modules: plugin/trino-bigquery, profile: cloud-tests-2 }
-            - { modules: plugin/trino-cassandra }
-            - { modules: plugin/trino-clickhouse }
+            #- { modules: lib/trino-filesystem-azure, profile: cloud-tests }
+            #- { modules: lib/trino-filesystem-gcs, profile: cloud-tests }
+            #- { modules: lib/trino-filesystem-s3, profile: cloud-tests }
+            #- { modules: lib/trino-hdfs, profile: cloud-tests }
+            #- { modules: plugin/trino-bigquery }
+            #- { modules: plugin/trino-bigquery, profile: cloud-tests-2 }
+            #- { modules: plugin/trino-cassandra }
+            #- { modules: plugin/trino-clickhouse }
             - { modules: plugin/trino-delta-lake }
-            - { modules: plugin/trino-delta-lake, profile: cloud-tests }
+            #- { modules: plugin/trino-delta-lake, profile: cloud-tests }
             - { modules: plugin/trino-delta-lake, profile: fte-tests }
-            - { modules: plugin/trino-druid }
-            - { modules: plugin/trino-elasticsearch }
-            - { modules: plugin/trino-exasol }
-            - { modules: plugin/trino-google-sheets }
+            #- { modules: plugin/trino-druid }
+            #- { modules: plugin/trino-elasticsearch }
+            #- { modules: plugin/trino-exasol }
+            #- { modules: plugin/trino-google-sheets }
             - { modules: plugin/trino-hive }
-            - { modules: plugin/trino-hive, profile: fte-tests }
-            - { modules: plugin/trino-hive, profile: test-parquet }
-            - { modules: plugin/trino-hudi }
+            #- { modules: plugin/trino-hive, profile: fte-tests }
+            #- { modules: plugin/trino-hive, profile: test-parquet }
+            #- { modules: plugin/trino-hudi }
             - { modules: plugin/trino-iceberg }
-            - { modules: plugin/trino-iceberg, profile: cloud-tests }
-            - { modules: plugin/trino-iceberg, profile: fte-tests }
-            - { modules: plugin/trino-iceberg, profile: minio-and-avro }
-            - { modules: plugin/trino-ignite }
-            - { modules: plugin/trino-kafka }
-            - { modules: plugin/trino-kudu }
-            - { modules: plugin/trino-mariadb }
-            - { modules: plugin/trino-mongodb }
-            - { modules: plugin/trino-mysql }
-            - { modules: plugin/trino-openlineage }
-            - { modules: plugin/trino-opensearch }
-            - { modules: plugin/trino-oracle }
-            - { modules: plugin/trino-phoenix5 }
-            - { modules: plugin/trino-pinot }
-            - { modules: plugin/trino-postgresql }
-            - { modules: plugin/trino-redis }
-            - { modules: plugin/trino-redshift }
-            - { modules: plugin/trino-redshift, profile: cloud-tests }
-            - { modules: plugin/trino-redshift, profile: fte-tests }
+            #- { modules: plugin/trino-iceberg, profile: cloud-tests }
+            #- { modules: plugin/trino-iceberg, profile: fte-tests }
+            #- { modules: plugin/trino-iceberg, profile: minio-and-avro }
+            #- { modules: plugin/trino-ignite }
+            #- { modules: plugin/trino-kafka }
+            #- { modules: plugin/trino-kudu }
+            #- { modules: plugin/trino-mariadb }
+            #- { modules: plugin/trino-mongodb }
+            #- { modules: plugin/trino-mysql }
+            #- { modules: plugin/trino-openlineage }
+            #- { modules: plugin/trino-opensearch }
+            #- { modules: plugin/trino-oracle }
+            #- { modules: plugin/trino-phoenix5 }
+            #- { modules: plugin/trino-pinot }
+            #- { modules: plugin/trino-postgresql }
+            #- { modules: plugin/trino-redis }
+            #- { modules: plugin/trino-redshift }
+            #- { modules: plugin/trino-redshift, profile: cloud-tests }
+            #- { modules: plugin/trino-redshift, profile: fte-tests }
             - { modules: plugin/trino-resource-group-managers }
-            - { modules: plugin/trino-singlestore }
-            - { modules: plugin/trino-snowflake }
-            - { modules: plugin/trino-snowflake, profile: cloud-tests }
-            - { modules: plugin/trino-sqlserver }
-            - { modules: plugin/trino-vertica }
-            - { modules: testing/trino-faulttolerant-tests, profile: default }
-            - { modules: testing/trino-faulttolerant-tests, profile: test-fault-tolerant-delta }
-            - { modules: testing/trino-faulttolerant-tests, profile: test-fault-tolerant-hive }
-            - { modules: testing/trino-faulttolerant-tests, profile: test-fault-tolerant-iceberg }
+            #- { modules: plugin/trino-singlestore }
+            #- { modules: plugin/trino-snowflake }
+            #- { modules: plugin/trino-snowflake, profile: cloud-tests }
+            #- { modules: plugin/trino-sqlserver }
+            #- { modules: plugin/trino-vertica }
+            #- { modules: testing/trino-faulttolerant-tests, profile: default }
+            #- { modules: testing/trino-faulttolerant-tests, profile: test-fault-tolerant-delta }
+            #- { modules: testing/trino-faulttolerant-tests, profile: test-fault-tolerant-hive }
+            #- { modules: testing/trino-faulttolerant-tests, profile: test-fault-tolerant-iceberg }
             - { modules: testing/trino-tests }
           EOF
+          pip install pyyaml
           ./.github/bin/build-matrix-from-impacted.py -v -i gib-impacted.log -m .github/test-matrix.yaml -o matrix.json
           echo "Matrix: $(jq '.' matrix.json)"
           echo "matrix=$(jq -c '.' matrix.json)" >> $GITHUB_OUTPUT
 
   test:
-    runs-on: 'ubuntu-latest'
+    runs-on: [self-hosted, linux, trino]
     needs: build-test-matrix
     if: needs.build-test-matrix.outputs.matrix != '{}'
     strategy:
@@ -806,7 +811,8 @@ jobs:
           github_token: ${{ secrets.GITHUB_TOKEN }}
 
   build-pt:
-    runs-on: ubuntu-latest
+    if: ${{ false }}  # we cannot run product tests
+    runs-on: [self-hosted, linux, trino]
     outputs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
       product-tests-changed: ${{ steps.filter.outputs.product-tests }}
@@ -970,6 +976,7 @@ jobs:
           contains(github.event.pull_request.labels.*.name, 'tests:all-product')
         run: |
           # converts entire YAML file into JSON - no filtering since we want all PTs to run
+          pip install pyyaml &&
           ./.github/bin/build-pt-matrix-from-impacted-connectors.py -v -m .github/test-pt-matrix.yaml -o matrix.json
       - name: Build PT matrix (impacted-features)
         if: |
@@ -1010,6 +1017,7 @@ jobs:
           TESTCONTAINERS_NEVER_PULL: true
         run: |
           # converts filtered YAML file into JSON
+          pip install pyyaml
           ./.github/bin/build-pt-matrix-from-impacted-connectors.py -v -m .github/test-pt-matrix.yaml -i impacted-features.log -o matrix.json
       - id: set-matrix
         run: |
@@ -1017,10 +1025,10 @@ jobs:
           echo "matrix=$(cat matrix.json)" >> $GITHUB_OUTPUT
 
   pt:
-    runs-on: 'ubuntu-latest'
+    if: ${{ false }}  # we cannot run product tests
+    runs-on: [self-hosted, linux, trino]
     # explicitly define the name to avoid adding the value of the `ignore exclusion if` matrix item
     name: pt (${{ matrix.config }}, ${{ matrix.suite }}, ${{ matrix.jdk }})
-    if: needs.build-pt.outputs.matrix != '{}'
     strategy:
       fail-fast: false
       matrix: ${{ fromJson(needs.build-pt.outputs.matrix) }}

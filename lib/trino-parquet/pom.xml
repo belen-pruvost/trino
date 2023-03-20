@@ -256,6 +256,7 @@
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-surefire-plugin</artifactId>
                 <configuration>
+                    <argLine>--add-modules jdk.incubator.vector</argLine>
                     <systemPropertyVariables>
                         <!--Disabled to reduce logging in CI https://github.com/trinodb/trino/issues/17452 -->
                         <ProgressLoggingListener.enabled>false</ProgressLoggingListener.enabled>

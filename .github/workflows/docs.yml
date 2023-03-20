@@ -30,7 +30,7 @@ concurrency:
 
 jobs:
   path-filters:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, trino]
     outputs:
       docs: ${{ steps.filter.outputs.docs }}
       other: ${{ steps.filter.outputs.other }}
