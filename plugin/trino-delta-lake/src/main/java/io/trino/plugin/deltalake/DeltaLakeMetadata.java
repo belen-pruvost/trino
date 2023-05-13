@@ -247,6 +247,7 @@ import static io.trino.plugin.deltalake.DeltaLakeTableProperties.getChangeDataFe
 import static io.trino.plugin.deltalake.DeltaLakeTableProperties.getCheckpointInterval;
 import static io.trino.plugin.deltalake.DeltaLakeTableProperties.getColumnMappingMode;
 import static io.trino.plugin.deltalake.DeltaLakeTableProperties.getDeletionVectorsEnabled;
+import static io.trino.plugin.deltalake.DeltaLakeTableProperties.getExtraProperties;
 import static io.trino.plugin.deltalake.DeltaLakeTableProperties.getLocation;
 import static io.trino.plugin.deltalake.DeltaLakeTableProperties.getPartitionedBy;
 import static io.trino.plugin.deltalake.metastore.DeltaLakeTableMetadataScheduler.containsSchemaString;
@@ -1277,7 +1278,13 @@ public class DeltaLakeMetadata
                                 .setDescription(tableMetadata.getComment())
                                 .setSchemaString(serializeSchemaAsJson(deltaTable.build()))
                                 .setPartitionColumns(getPartitionedBy(tableMetadata.getProperties()))
-                                .setConfiguration(configurationForNewTable(checkpointInterval, changeDataFeedEnabled, deletionVectorsEnabled, columnMappingMode, maxFieldId)));
+                                .setConfiguration(configurationForNewTable(
+                                        checkpointInterval,
+                                        changeDataFeedEnabled,
+                                        deletionVectorsEnabled,
+                                        columnMappingMode,
+                                        maxFieldId,
+                                        getExtraProperties(tableMetadata.getProperties()))));
 
                 transactionLogWriter.flush();
 
@@ -1462,6 +1469,7 @@ public class DeltaLakeMetadata
                 getChangeDataFeedEnabled(tableMetadata.getProperties()),
                 getDeletionVectorsEnabled(tableMetadata.getProperties()),
                 serializeSchemaAsJson(deltaTable.build()),
+                getExtraProperties(tableMetadata.getProperties()),
                 columnMappingMode,
                 maxFieldId,
                 replace,
@@ -1638,7 +1646,13 @@ public class DeltaLakeMetadata
                             .setDescription(handle.comment())
                             .setSchemaString(schemaString)
                             .setPartitionColumns(handle.partitionedBy())
-                            .setConfiguration(configurationForNewTable(handle.checkpointInterval(), handle.changeDataFeedEnabled(), handle.deletionVectorsEnabled(), columnMappingMode, handle.maxColumnId())));
+                            .setConfiguration(configurationForNewTable(
+                                    handle.checkpointInterval(),
+                                    handle.changeDataFeedEnabled(),
+                                    handle.deletionVectorsEnabled(),
+                                    columnMappingMode,
+                                    handle.maxColumnId(),
+                                    handle.extraProperties())));
             appendAddFileEntries(transactionLogWriter, dataFileInfos, physicalPartitionNames, columnNames, true);
             if (handle.readVersion().isPresent()) {
                 long writeTimestamp = Instant.now().toEpochMilli();

@@ -176,6 +176,7 @@ public class TestDeltaLakePageSink
                 Optional.of(false),
                 false,
                 schemaString,
+                ImmutableMap.of(),
                 NONE,
                 OptionalInt.empty(),
                 false,

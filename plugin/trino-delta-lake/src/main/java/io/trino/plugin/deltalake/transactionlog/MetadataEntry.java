@@ -170,7 +170,8 @@ public class MetadataEntry
             Optional<Boolean> changeDataFeedEnabled,
             boolean deletionVectorsEnabled,
             ColumnMappingMode columnMappingMode,
-            OptionalInt maxFieldId)
+            OptionalInt maxFieldId,
+            Map<String, String> extraProperties)
     {
         ImmutableMap.Builder<String, String> configurationMapBuilder = ImmutableMap.builder();
         checkpointInterval.ifPresent(interval -> configurationMapBuilder.put(DELTA_CHECKPOINT_INTERVAL_PROPERTY, String.valueOf(interval)));
@@ -184,6 +185,7 @@ public class MetadataEntry
             }
             case UNKNOWN -> throw new UnsupportedOperationException();
         }
+        configurationMapBuilder.putAll(extraProperties);
         return configurationMapBuilder.buildOrThrow();
     }
 

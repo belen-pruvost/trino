@@ -13,18 +13,24 @@
  */
 package io.trino.plugin.deltalake;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableSet;
+import com.google.common.collect.Sets;
 import com.google.inject.Inject;
 import io.trino.plugin.deltalake.transactionlog.DeltaLakeSchemaSupport.ColumnMappingMode;
 import io.trino.spi.TrinoException;
 import io.trino.spi.session.PropertyMetadata;
 import io.trino.spi.type.ArrayType;
+import io.trino.spi.type.MapType;
+import io.trino.spi.type.TypeManager;
 
 import java.util.Collection;
 import java.util.EnumSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 import static com.google.common.collect.ImmutableList.toImmutableList;
 import static io.trino.spi.StandardErrorCode.INVALID_TABLE_PROPERTY;
@@ -33,6 +39,7 @@ import static io.trino.spi.session.PropertyMetadata.longProperty;
 import static io.trino.spi.session.PropertyMetadata.stringProperty;
 import static io.trino.spi.type.VarcharType.VARCHAR;
 import static java.lang.String.format;
+import static java.util.Collections.emptyMap;
 import static java.util.Locale.ENGLISH;
 
 public class DeltaLakeTableProperties
@@ -43,12 +50,23 @@ public class DeltaLakeTableProperties
     public static final String CHANGE_DATA_FEED_ENABLED_PROPERTY = "change_data_feed_enabled";
     public static final String COLUMN_MAPPING_MODE_PROPERTY = "column_mapping_mode";
     public static final String DELETION_VECTORS_ENABLED_PROPERTY = "deletion_vectors_enabled";
+    public static final String EXTRA_PROPERTIES = "extra_properties";
+
+    @VisibleForTesting
+    public static final Set<String> PROPERTY_NAMES = ImmutableSet.of(
+            LOCATION_PROPERTY,
+            PARTITIONED_BY_PROPERTY,
+            CHECKPOINT_INTERVAL_PROPERTY,
+            CHANGE_DATA_FEED_ENABLED_PROPERTY,
+            COLUMN_MAPPING_MODE_PROPERTY,
+            DELETION_VECTORS_ENABLED_PROPERTY,
+            EXTRA_PROPERTIES);
 
     private final List<PropertyMetadata<?>> tableProperties;
 
     @SuppressWarnings("unchecked")
     @Inject
-    public DeltaLakeTableProperties(DeltaLakeConfig config)
+    public DeltaLakeTableProperties(DeltaLakeConfig config, TypeManager typeManager)
     {
         tableProperties = ImmutableList.<PropertyMetadata<?>>builder()
                 .add(stringProperty(
@@ -94,6 +112,19 @@ public class DeltaLakeTableProperties
                         "Enables deletion vectors",
                         config.isDeletionVectorsEnabled(),
                         false))
+                .add(new PropertyMetadata<>(
+                        EXTRA_PROPERTIES,
+                        "Extra table properties",
+                        new MapType(VARCHAR, VARCHAR, typeManager.getTypeOperators()),
+                        Map.class,
+                        null,
+                        true, // currently not shown in SHOW CREATE TABLE
+                        value -> {
+                            Map<String, String> extraProperties = (Map<String, String>) value;
+                            validateExtraProperties(extraProperties);
+                            return extraProperties;
+                        },
+                        value -> value))
                 .build();
     }
 
@@ -138,5 +169,32 @@ public class DeltaLakeTableProperties
     public static boolean getDeletionVectorsEnabled(Map<String, Object> tableProperties)
     {
         return (boolean) tableProperties.getOrDefault(DELETION_VECTORS_ENABLED_PROPERTY, false);
+    }
+
+    public static Map<String, String> getExtraProperties(Map<String, Object> tableProperties)
+    {
+        Map<String, String> extraProperties = (Map<String, String>) tableProperties.get(EXTRA_PROPERTIES);
+        if (extraProperties != null) {
+            return extraProperties;
+        }
+        return emptyMap();
+    }
+
+    private static void validateExtraProperties(Map<String, String> extraProperties)
+    {
+        if (extraProperties.containsValue(null)) {
+            throw new TrinoException(INVALID_TABLE_PROPERTY, format("Extra table property value cannot be null '%s'", extraProperties));
+        }
+        if (extraProperties.containsKey(null)) {
+            throw new TrinoException(INVALID_TABLE_PROPERTY, format("Extra table property key cannot be null '%s'", extraProperties));
+        }
+        Set<String> illegalExtraProperties = Sets.intersection(
+                DeltaLakeTableProperties.PROPERTY_NAMES,
+                extraProperties.keySet());
+        if (!illegalExtraProperties.isEmpty()) {
+            throw new TrinoException(
+                    INVALID_TABLE_PROPERTY,
+                    "Illegal keys in extra_properties: " + illegalExtraProperties);
+        }
     }
 }

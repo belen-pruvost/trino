@@ -19,6 +19,7 @@ import io.trino.plugin.deltalake.transactionlog.ProtocolEntry;
 import io.trino.spi.connector.ConnectorOutputTableHandle;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.OptionalInt;
 import java.util.OptionalLong;
@@ -38,6 +39,7 @@ public record DeltaLakeOutputTableHandle(
         Optional<Boolean> changeDataFeedEnabled,
         boolean deletionVectorsEnabled,
         String schemaString,
+        Map<String, String> extraProperties,
         ColumnMappingMode columnMappingMode,
         OptionalInt maxColumnId,
         boolean replace,
@@ -55,6 +57,7 @@ public record DeltaLakeOutputTableHandle(
         requireNonNull(comment, "comment is null");
         requireNonNull(changeDataFeedEnabled, "changeDataFeedEnabled is null");
         requireNonNull(schemaString, "schemaString is null");
+        requireNonNull(extraProperties, "extraProperties is null");
         requireNonNull(columnMappingMode, "columnMappingMode is null");
         requireNonNull(maxColumnId, "maxColumnId is null");
         requireNonNull(readVersion, "readVersion is null");
