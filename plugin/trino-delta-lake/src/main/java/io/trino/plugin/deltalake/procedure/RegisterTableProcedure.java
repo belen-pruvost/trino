@@ -187,7 +187,8 @@ public class RegisterTableProcedure
                     true,
                     Optional.ofNullable(metadataEntry.getDescription()),
                     tableSnapshot.getVersion(),
-                    metadataEntry.getSchemaString());
+                    metadataEntry.getSchemaString(),
+                    metadataEntry.getConfiguration());
             PrincipalPrivileges principalPrivileges = buildInitialPrivilegeSet(table.getOwner().orElseThrow());
             metastore.createTable(table, principalPrivileges);
         }

@@ -2897,6 +2897,18 @@ public abstract class BaseDeltaLakeConnectorSmokeTest
                 ".*Extra table property value cannot be null '\\{null.property=null}'.*");
     }
 
+    @Test
+    public void testDuneSchemaInMetastore()
+    {
+        String tableName = "test_create_table_dune_schema" + randomNameSuffix();
+        assertUpdate("CREATE TABLE " + tableName + " (c VARCHAR) WITH (extra_properties = MAP(ARRAY['extra.property.one', 'extra.property.two'], ARRAY['one', 'two']))");
+        Map<String, String> configuration = metastore.getTable(SCHEMA, tableName).orElseThrow().getParameters();
+        assertThat(configuration.get("extra.property.one")).isEqualTo("one");
+        assertThat(configuration.get("extra.property.two")).isEqualTo("two");
+        assertThat(configuration.get("dune.schema")).isEqualTo("{\"type\":\"struct\",\"fields\":[{\"name\":\"c\",\"type\":\"string\",\"nullable\":true,\"metadata\":{}}]}");
+        assertUpdate("DROP TABLE " + tableName);
+    }
+
     protected List<String> listCheckpointFiles(String transactionLogDirectory)
     {
         return listFiles(transactionLogDirectory).stream()

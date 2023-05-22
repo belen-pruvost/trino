@@ -385,6 +385,7 @@ public class DeltaLakeMetadata
     public static final String OPTIMIZE_OPERATION = "OPTIMIZE";
     public static final String SET_TBLPROPERTIES_OPERATION = "SET TBLPROPERTIES";
     public static final String CHANGE_COLUMN_OPERATION = "CHANGE COLUMN";
+    public static final String DUNE_SCHEMA_PROPERTY = "dune.schema";
     public static final int DEFAULT_READER_VERSION = 1;
     public static final int DEFAULT_WRITER_VERSION = 2;
     // The highest reader and writer versions Trino supports
@@ -1230,6 +1231,7 @@ public class DeltaLakeMetadata
             maxFieldId = OptionalInt.of(fieldId.get());
         }
 
+        Map<String, String> configuration = null;
         String schemaString = serializeSchemaAsJson(deltaTable.build());
         try {
             TrinoFileSystem fileSystem = fileSystemFactory.create(session);
@@ -1268,6 +1270,13 @@ public class DeltaLakeMetadata
                     protocolEntry = protocolEntryForNewTable(containsTimestampType, tableMetadata.getProperties());
                 }
 
+                configuration = configurationForNewTable(
+                        checkpointInterval,
+                        changeDataFeedEnabled,
+                        deletionVectorsEnabled,
+                        columnMappingMode,
+                        maxFieldId,
+                        getExtraProperties(tableMetadata.getProperties()));
                 appendTableEntries(
                         commitVersion,
                         transactionLogWriter,
@@ -1276,7 +1285,7 @@ public class DeltaLakeMetadata
                         protocolEntry,
                         MetadataEntry.builder()
                                 .setDescription(tableMetadata.getComment())
-                                .setSchemaString(serializeSchemaAsJson(deltaTable.build()))
+                                .setSchemaString(schemaString)
                                 .setPartitionColumns(getPartitionedBy(tableMetadata.getProperties()))
                                 .setConfiguration(configurationForNewTable(
                                         checkpointInterval,
@@ -1297,7 +1306,11 @@ public class DeltaLakeMetadata
             throw new TrinoException(DELTA_LAKE_BAD_WRITE, "Unable to access file system for: " + location, e);
         }
 
-        Table table = buildTable(session, schemaTableName, location, external, tableMetadata.getComment(), commitVersion, schemaString);
+        Table table = buildTable(session, schemaTableName, location, external, tableMetadata.getComment(), commitVersion, schemaString,
+                ImmutableMap.<String, String>builder()
+                        .putAll(configuration)
+                        .put(DUNE_SCHEMA_PROPERTY, schemaString)
+                        .buildOrThrow());
 
         PrincipalPrivileges principalPrivileges = buildInitialPrivilegeSet(table.getOwner().orElseThrow());
         // As a precaution, clear the caches
@@ -1311,7 +1324,7 @@ public class DeltaLakeMetadata
         }
     }
 
-    public Table buildTable(ConnectorSession session, SchemaTableName schemaTableName, String location, boolean isExternal, Optional<String> tableComment, long version, String schemaString)
+    public Table buildTable(ConnectorSession session, SchemaTableName schemaTableName, String location, boolean isExternal, Optional<String> tableComment, long version, String schemaString, Map<String, String> configuration)
     {
         Table.Builder tableBuilder = Table.builder()
                 .setDatabaseName(schemaTableName.getSchemaName())
@@ -1319,7 +1332,10 @@ public class DeltaLakeMetadata
                 .setOwner(Optional.of(session.getUser()))
                 .setTableType(isExternal ? EXTERNAL_TABLE.name() : MANAGED_TABLE.name())
                 .setDataColumns(DUMMY_DATA_COLUMNS)
-                .setParameters(deltaTableProperties(session, location, isExternal, tableComment, version, schemaString));
+                .setParameters(ImmutableMap.<String, String>builder()
+                        .putAll(deltaTableProperties(session, location, isExternal, tableComment, version, schemaString))
+                        .putAll(configuration)
+                        .buildOrThrow());
 
         setDeltaStorageFormat(tableBuilder, location);
         return tableBuilder.build();
@@ -1699,7 +1715,11 @@ public class DeltaLakeMetadata
                         true);
             }
 
-            Table table = buildTable(session, schemaTableName, location, handle.external(), handle.comment(), commitVersion, handle.schemaString());
+            Table table = buildTable(session, schemaTableName, location, handle.external(), handle.comment(), commitVersion, handle.schemaString(),
+                    ImmutableMap.<String, String>builder()
+                            .put(DUNE_SCHEMA_PROPERTY, handle.schemaString())
+                            .putAll(handle.extraProperties())
+                            .buildOrThrow());
             PrincipalPrivileges principalPrivileges = buildInitialPrivilegeSet(table.getOwner().orElseThrow());
 
             // As a precaution, clear the caches
