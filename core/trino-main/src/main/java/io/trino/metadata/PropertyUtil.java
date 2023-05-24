@@ -13,6 +13,7 @@
  */
 package io.trino.metadata;
 
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSortedMap;
 import com.google.common.collect.Maps;
@@ -32,11 +33,14 @@ import io.trino.sql.tree.BooleanLiteral;
 import io.trino.sql.tree.DoubleLiteral;
 import io.trino.sql.tree.Expression;
 import io.trino.sql.tree.ExpressionTreeRewriter;
+import io.trino.sql.tree.FunctionCall;
 import io.trino.sql.tree.Identifier;
 import io.trino.sql.tree.LongLiteral;
 import io.trino.sql.tree.NodeRef;
 import io.trino.sql.tree.Parameter;
 import io.trino.sql.tree.Property;
+import io.trino.sql.tree.QualifiedName;
+import io.trino.sql.tree.Row;
 import io.trino.sql.tree.StringLiteral;
 
 import java.util.LinkedHashMap;
@@ -49,7 +53,9 @@ import static io.trino.spi.type.TypeUtils.writeNativeValue;
 import static io.trino.sql.analyzer.ConstantEvaluator.evaluateConstant;
 import static io.trino.sql.analyzer.ExpressionTreeUtils.extractLocation;
 import static io.trino.util.MoreLists.mappedCopy;
+import static java.util.Arrays.asList;
 import static java.util.Locale.ENGLISH;
+import static java.util.Map.Entry.comparingByKey;
 
 public final class PropertyUtil
 {
@@ -224,6 +230,10 @@ public final class PropertyUtil
             case Long _, Integer _ -> new LongLiteral(value.toString());
             case Double _ -> new DoubleLiteral(value.toString());
             case List<?> list -> new Array(mappedCopy(list, item -> toExpression(errorCode, item)));
+            case Map<?, ?> map -> new FunctionCall(QualifiedName.of("map_from_entries"),
+                        ImmutableList.of(new Array(((Map<String, Object>) map).entrySet().stream().sorted(comparingByKey())
+                                .map(entry -> new Row(asList(toExpression(errorCode, entry.getKey()), toExpression(errorCode, entry.getValue()))))
+                                .collect(toImmutableList()))));
             case null -> throw new TrinoException(errorCode, "Property value is null");
             default -> throw new TrinoException(errorCode, "Failed to convert object of type %s to expression".formatted(value.getClass().getName()));
         };
