@@ -241,6 +241,7 @@ import static io.trino.plugin.deltalake.DeltaLakeTableProperties.CHANGE_DATA_FEE
 import static io.trino.plugin.deltalake.DeltaLakeTableProperties.CHECKPOINT_INTERVAL_PROPERTY;
 import static io.trino.plugin.deltalake.DeltaLakeTableProperties.COLUMN_MAPPING_MODE_PROPERTY;
 import static io.trino.plugin.deltalake.DeltaLakeTableProperties.DELETION_VECTORS_ENABLED_PROPERTY;
+import static io.trino.plugin.deltalake.DeltaLakeTableProperties.EXTRA_PROPERTIES;
 import static io.trino.plugin.deltalake.DeltaLakeTableProperties.LOCATION_PROPERTY;
 import static io.trino.plugin.deltalake.DeltaLakeTableProperties.PARTITIONED_BY_PROPERTY;
 import static io.trino.plugin.deltalake.DeltaLakeTableProperties.getChangeDataFeedEnabled;
@@ -386,6 +387,8 @@ public class DeltaLakeMetadata
     public static final String SET_TBLPROPERTIES_OPERATION = "SET TBLPROPERTIES";
     public static final String CHANGE_COLUMN_OPERATION = "CHANGE COLUMN";
     public static final String DUNE_SCHEMA_PROPERTY = "dune.schema";
+    public static final String DUNE_KEY_PREFIX = "dune.";
+
     public static final int DEFAULT_READER_VERSION = 1;
     public static final int DEFAULT_WRITER_VERSION = 2;
     // The highest reader and writer versions Trino supports
@@ -780,6 +783,14 @@ public class DeltaLakeMetadata
         ColumnMappingMode columnMappingMode = getColumnMappingMode(metadataEntry, protocolEntry);
         if (columnMappingMode != NONE) {
             properties.put(COLUMN_MAPPING_MODE_PROPERTY, columnMappingMode.name());
+        }
+        ImmutableMap.Builder<String, String> extraPropertiesBuilder = ImmutableMap.builder();
+        metadataEntry.getConfiguration().entrySet().stream()
+                .filter(entry -> entry.getKey().startsWith(DUNE_KEY_PREFIX))
+                .forEach(entry -> extraPropertiesBuilder.put(entry.getKey(), entry.getValue()));
+        ImmutableMap<String, String> extraProperties = extraPropertiesBuilder.buildOrThrow();
+        if (!extraProperties.isEmpty()) {
+            properties.put(EXTRA_PROPERTIES, extraPropertiesBuilder.buildOrThrow());
         }
 
         return new ConnectorTableMetadata(

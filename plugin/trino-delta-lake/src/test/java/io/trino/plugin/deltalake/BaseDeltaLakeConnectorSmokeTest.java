@@ -2898,6 +2898,27 @@ public abstract class BaseDeltaLakeConnectorSmokeTest
     }
 
     @Test
+    public void testDuneExtraProperty()
+    {
+        String tableName = "test_create_table_with_dune_extra_properties" + randomNameSuffix();
+        assertUpdate("CREATE TABLE " + tableName + " (c VARCHAR) WITH (extra_properties = MAP(ARRAY['extra.property.one', 'dune.property.two'], ARRAY['one', 'two']))");
+
+        assertQuery(
+                "SELECT key, value FROM \"%s$properties\"".formatted(tableName),
+                "VALUES ('delta.minReaderVersion', '1'), ('delta.minWriterVersion', '2'), ('extra.property.one', 'one'), ('dune.property.two', 'two')");
+        assertThat(computeActual("SHOW CREATE TABLE %s".formatted(tableName)).getOnlyValue())
+                .isEqualTo("CREATE TABLE delta_lake.%s.%s (\n".formatted(SCHEMA, tableName) +
+                        "   c varchar\n" +
+                        ")\n" +
+                        "WITH (\n" +
+                        "   extra_properties = map_from_entries(ARRAY[ROW('dune.property.two', 'two')]),\n" +
+                        "   location = '" + getTableLocation(tableName) + "'\n" +
+                        ")");
+
+        assertUpdate("DROP TABLE " + tableName);
+    }
+
+    @Test
     public void testDuneSchemaInMetastore()
     {
         String tableName = "test_create_table_dune_schema" + randomNameSuffix();
