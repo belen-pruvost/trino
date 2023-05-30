@@ -2785,7 +2785,7 @@ public abstract class BaseDeltaLakeConnectorSmokeTest
 
         assertQuery(
                 "SELECT key, value FROM \"%s$properties\"".formatted(tableName),
-                "VALUES ('delta.minReaderVersion', '1'), ('delta.minWriterVersion', '2'), ('extra.property.one', 'one'), ('Extra.Property.Two', 'Two')");
+                "VALUES ('delta.minReaderVersion', '1'), ('delta.minWriterVersion', '2'), ('delta.enableDeletionVectors', 'false'), ('extra.property.one', 'one'), ('Extra.Property.Two', 'Two')");
         assertThat(computeActual("SHOW CREATE TABLE %s".formatted(tableName)).getOnlyValue())
                 .isEqualTo("CREATE TABLE delta.%s.%s (\n".formatted(SCHEMA, tableName) +
                         "   c varchar\n" +
@@ -2805,7 +2805,7 @@ public abstract class BaseDeltaLakeConnectorSmokeTest
 
         assertQuery(
                 "SELECT key, value FROM \"%s$properties\"".formatted(tableName),
-                "VALUES ('delta.minReaderVersion', '1'), ('delta.minWriterVersion', '2'), ('extra.property.one', 'one'), ('Extra.Property.Two', 'Two')");
+                "VALUES ('delta.minReaderVersion', '1'), ('delta.minWriterVersion', '2'), ('delta.enableDeletionVectors', 'false'), ('extra.property.one', 'one'), ('Extra.Property.Two', 'Two')");
         assertThat(computeActual("SHOW CREATE TABLE %s".formatted(tableName)).getOnlyValue())
                 .isEqualTo("CREATE TABLE delta.%s.%s (\n".formatted(SCHEMA, tableName) +
                         "   c varchar\n" +
@@ -2825,7 +2825,7 @@ public abstract class BaseDeltaLakeConnectorSmokeTest
 
         assertQuery(
                 "SELECT key, value FROM \"%s$properties\"".formatted(tableName),
-                "VALUES ('delta.minReaderVersion', '1'), ('delta.minWriterVersion', '2'), ('extra.property.one', 'one'), ('extra.property.two', 'two')");
+                "VALUES ('delta.minReaderVersion', '1'), ('delta.minWriterVersion', '2'), ('delta.enableDeletionVectors', 'false'), ('extra.property.one', 'one'), ('extra.property.two', 'two')");
         assertThat(computeActual("SHOW CREATE TABLE %s".formatted(tableName)).getOnlyValue())
                 .isEqualTo("CREATE TABLE delta.%s.%s (\n".formatted(SCHEMA, tableName) +
                         "   c varchar\n" +
@@ -2837,7 +2837,7 @@ public abstract class BaseDeltaLakeConnectorSmokeTest
         assertUpdate("ALTER TABLE " + tableName + " SET PROPERTIES change_data_feed_enabled = true");
         assertQuery(
                 "SELECT key, value FROM \"%s$properties\"".formatted(tableName),
-                "VALUES ('delta.minReaderVersion', '1'), ('delta.minWriterVersion', '4'), ('extra.property.one', 'one'), ('extra.property.two', 'two'), ('delta.enableChangeDataFeed', 'true')");
+                "VALUES ('delta.minReaderVersion', '1'), ('delta.minWriterVersion', '4'), ('delta.enableDeletionVectors', 'false'), ('extra.property.one', 'one'), ('extra.property.two', 'two'), ('delta.enableChangeDataFeed', 'true')");
         assertThat(computeActual("SHOW CREATE TABLE %s".formatted(tableName)).getOnlyValue())
                 .isEqualTo("CREATE TABLE delta.%s.%s (\n".formatted(SCHEMA, tableName) +
                         "   c varchar\n" +
@@ -2850,7 +2850,7 @@ public abstract class BaseDeltaLakeConnectorSmokeTest
         assertUpdate("ALTER TABLE " + tableName + " SET PROPERTIES change_data_feed_enabled = false");
         assertQuery(
                 "SELECT key, value FROM \"%s$properties\"".formatted(tableName),
-                "VALUES ('delta.minReaderVersion', '1'), ('delta.minWriterVersion', '4'), ('extra.property.one', 'one'), ('extra.property.two', 'two'), ('delta.enableChangeDataFeed', 'false')");
+                "VALUES ('delta.minReaderVersion', '1'), ('delta.minWriterVersion', '4'), ('delta.enableDeletionVectors', 'false'), ('extra.property.one', 'one'), ('extra.property.two', 'two'), ('delta.enableChangeDataFeed', 'false')");
         assertThat(computeActual("SHOW CREATE TABLE %s".formatted(tableName)).getOnlyValue())
                 .isEqualTo("CREATE TABLE delta.%s.%s (\n".formatted(SCHEMA, tableName) +
                         "   c varchar\n" +
@@ -2859,6 +2859,42 @@ public abstract class BaseDeltaLakeConnectorSmokeTest
                         "   change_data_feed_enabled = false,\n" +
                         "   location = '" + getTableLocation(tableName) + "'\n" +
                         ")");
+
+        assertUpdate("DROP TABLE " + tableName);
+    }
+
+    @Test
+    public void testAlterTableSetProperties()
+    {
+        String tableName = "test_alter_table_set_properties" + randomNameSuffix();
+        assertUpdate("CREATE TABLE " + tableName + " (c VARCHAR) WITH (extra_properties = MAP(ARRAY['dune.property.one', 'dune.property.two'], ARRAY['one', 'two']))");
+
+        assertQuery(
+                "SELECT key, value FROM \"%s$properties\"".formatted(tableName),
+                "VALUES ('delta.minReaderVersion', '1'), ('delta.minWriterVersion', '2'), ('delta.enableDeletionVectors', 'false'), ('dune.property.one', 'one'), ('dune.property.two', 'two')");
+        assertThat(computeActual("SHOW CREATE TABLE %s".formatted(tableName)).getOnlyValue())
+                .isEqualTo("CREATE TABLE delta.%s.%s (\n".formatted(SCHEMA, tableName) +
+                        "   c varchar\n" +
+                        ")\n" +
+                        "WITH (\n" +
+                        "   extra_properties = map_from_entries(ARRAY[ROW('dune.property.one', 'one'),ROW('dune.property.two', 'two')]),\n" +
+                        "   location = '" + getTableLocation(tableName) + "'\n" +
+                        ")");
+
+        assertUpdate("ALTER TABLE " + tableName + " SET PROPERTIES extra_properties = MAP(ARRAY['dune.property.two', 'dune.property.three'], ARRAY['twice', 'three'])");
+        assertQuery(
+                "SELECT key, value FROM \"%s$properties\"".formatted(tableName),
+                "VALUES ('delta.minReaderVersion', '1'), ('delta.minWriterVersion', '2'), ('delta.enableDeletionVectors', 'false'), ('dune.property.one', 'one'), ('dune.property.two', 'twice'), ('dune.property.three', 'three')");
+        assertThat(computeActual("SHOW CREATE TABLE %s".formatted(tableName)).getOnlyValue())
+                .isEqualTo("CREATE TABLE delta.%s.%s (\n".formatted(SCHEMA, tableName) +
+                        "   c varchar\n" +
+                        ")\n" +
+                        "WITH (\n" +
+                        "   extra_properties = map_from_entries(ARRAY[ROW('dune.property.one', 'one'),ROW('dune.property.three', 'three'),ROW('dune.property.two', 'twice')]),\n" +
+                        "   location = '" + getTableLocation(tableName) + "'\n" +
+                        ")");
+
+        assertQueryFails("ALTER TABLE " + tableName + " SET PROPERTIES extra_properties = MAP(ARRAY['extra.property.one'], ARRAY['one'])", "Invalid extra property: 'extra.property.one'");
 
         assertUpdate("DROP TABLE " + tableName);
     }
@@ -2905,9 +2941,9 @@ public abstract class BaseDeltaLakeConnectorSmokeTest
 
         assertQuery(
                 "SELECT key, value FROM \"%s$properties\"".formatted(tableName),
-                "VALUES ('delta.minReaderVersion', '1'), ('delta.minWriterVersion', '2'), ('extra.property.one', 'one'), ('dune.property.two', 'two')");
+                "VALUES ('delta.minReaderVersion', '1'), ('delta.minWriterVersion', '2'), ('delta.enableDeletionVectors', 'false'), ('extra.property.one', 'one'), ('dune.property.two', 'two')");
         assertThat(computeActual("SHOW CREATE TABLE %s".formatted(tableName)).getOnlyValue())
-                .isEqualTo("CREATE TABLE delta_lake.%s.%s (\n".formatted(SCHEMA, tableName) +
+                .isEqualTo("CREATE TABLE delta.%s.%s (\n".formatted(SCHEMA, tableName) +
                         "   c varchar\n" +
                         ")\n" +
                         "WITH (\n" +

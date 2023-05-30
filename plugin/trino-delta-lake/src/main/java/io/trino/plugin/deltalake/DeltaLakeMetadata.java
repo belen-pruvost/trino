@@ -315,6 +315,7 @@ import static io.trino.spi.StandardErrorCode.GENERIC_USER_ERROR;
 import static io.trino.spi.StandardErrorCode.INVALID_ANALYZE_PROPERTY;
 import static io.trino.spi.StandardErrorCode.INVALID_ARGUMENTS;
 import static io.trino.spi.StandardErrorCode.INVALID_SCHEMA_PROPERTY;
+import static io.trino.spi.StandardErrorCode.INVALID_TABLE_PROPERTY;
 import static io.trino.spi.StandardErrorCode.NOT_FOUND;
 import static io.trino.spi.StandardErrorCode.NOT_SUPPORTED;
 import static io.trino.spi.StandardErrorCode.QUERY_REJECTED;
@@ -423,7 +424,7 @@ public class DeltaLakeMetadata
             .add(NUMBER_OF_NON_NULL_VALUES)
             .build();
     private static final String ENABLE_NON_CONCURRENT_WRITES_CONFIGURATION_KEY = "delta.enable-non-concurrent-writes";
-    public static final Set<String> UPDATABLE_TABLE_PROPERTIES = ImmutableSet.of(CHANGE_DATA_FEED_ENABLED_PROPERTY);
+    public static final Set<String> UPDATABLE_TABLE_PROPERTIES = ImmutableSet.of(CHANGE_DATA_FEED_ENABLED_PROPERTY, EXTRA_PROPERTIES);
 
     public static final Set<String> CHANGE_DATA_FEED_COLUMN_NAMES = ImmutableSet.<String>builder()
             .add("_change_type")
@@ -3168,6 +3169,17 @@ public class DeltaLakeMetadata
             Map<String, String> configuration = new HashMap<>(handle.getMetadataEntry().getConfiguration());
             configuration.put(DELTA_CHANGE_DATA_FEED_ENABLED_PROPERTY, String.valueOf(changeDataFeedEnabled));
             metadataEntry = Optional.of(buildMetadataEntry(handle.getMetadataEntry(), configuration, createdTime));
+        }
+        if (properties.containsKey(EXTRA_PROPERTIES)) {
+            Map<String, String> configuration = new HashMap<>(metadataEntry.orElse(handle.getMetadataEntry()).getConfiguration());
+            Map<String, String> extraProperties = (Map<String, String>) properties.get(EXTRA_PROPERTIES).get();
+            extraProperties.forEach((k, v) -> {
+                if (!k.startsWith(DUNE_KEY_PREFIX)) {
+                    throw new TrinoException(INVALID_TABLE_PROPERTY, "Invalid extra property: '" + k + "'");
+                }
+            });
+            configuration.putAll(extraProperties);
+            metadataEntry = Optional.of(buildMetadataEntry(metadataEntry.orElse(handle.getMetadataEntry()), configuration, createdTime));
         }
 
         long readVersion = handle.getReadVersion();
