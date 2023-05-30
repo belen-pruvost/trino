@@ -16,6 +16,7 @@ package io.trino.plugin.deltalake.metastore;
 import io.trino.annotation.NotThreadSafe;
 import io.trino.spi.connector.SchemaTableName;
 
+import java.util.Map;
 import java.util.Optional;
 
 @NotThreadSafe
@@ -24,5 +25,5 @@ public interface DeltaLakeTableOperations
     /**
      * @throws io.trino.spi.connector.TableNotFoundException if the table does not exist
      */
-    void commitToExistingTable(SchemaTableName schemaTableName, long version, String schemaString, Optional<String> tableComment);
+    void commitToExistingTable(SchemaTableName schemaTableName, long version, String schemaString, Optional<String> tableComment, Map<String, String> extraProperties);
 }

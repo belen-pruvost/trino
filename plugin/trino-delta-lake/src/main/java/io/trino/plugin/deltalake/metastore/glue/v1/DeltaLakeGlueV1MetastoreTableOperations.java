@@ -25,6 +25,7 @@ import io.trino.plugin.hive.metastore.glue.GlueMetastoreStats;
 import io.trino.spi.connector.SchemaTableName;
 import io.trino.spi.connector.TableNotFoundException;
 
+import java.util.Map;
 import java.util.Optional;
 
 import static io.trino.plugin.deltalake.metastore.DeltaLakeTableMetadataScheduler.tableMetadataParameters;
@@ -45,7 +46,7 @@ public class DeltaLakeGlueV1MetastoreTableOperations
     }
 
     @Override
-    public void commitToExistingTable(SchemaTableName schemaTableName, long version, String schemaString, Optional<String> tableComment)
+    public void commitToExistingTable(SchemaTableName schemaTableName, long version, String schemaString, Optional<String> tableComment, Map<String, String> extraProperties)
     {
         GetTableRequest getTableRequest = new GetTableRequest()
                 .withDatabaseName(schemaTableName.getSchemaName())

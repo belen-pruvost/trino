@@ -49,7 +49,7 @@ public class DeltaLakeThriftMetastoreTableOperations
     }
 
     @Override
-    public void commitToExistingTable(SchemaTableName schemaTableName, long version, String schemaString, Optional<String> tableComment)
+    public void commitToExistingTable(SchemaTableName schemaTableName, long version, String schemaString, Optional<String> tableComment, Map<String, String> extraProperties)
     {
         long lockId = thriftMetastore.acquireTableExclusiveLock(
                 new AcidTransactionOwner(session.getUser()),
@@ -63,6 +63,7 @@ public class DeltaLakeThriftMetastoreTableOperations
             Map<String, String> parameters = ImmutableMap.<String, String>builder()
                     .putAll(currentTable.getParameters())
                     .putAll(tableMetadataParameters(version, schemaString, tableComment))
+                    .putAll(extraProperties)
                     .buildKeepingLast();
             Table updatedTable = currentTable.withParameters(parameters);
 

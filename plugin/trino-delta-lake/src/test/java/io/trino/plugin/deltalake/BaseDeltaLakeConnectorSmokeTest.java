@@ -25,6 +25,7 @@ import io.trino.Session;
 import io.trino.execution.QueryManager;
 import io.trino.metastore.HiveMetastore;
 import io.trino.operator.OperatorStats;
+import io.trino.plugin.deltalake.metastore.DeltaLakeTableMetadataScheduler;
 import io.trino.plugin.deltalake.transactionlog.AddFileEntry;
 import io.trino.plugin.deltalake.transactionlog.TransactionLogAccess;
 import io.trino.plugin.hive.TestingHivePlugin;
@@ -140,6 +141,7 @@ public abstract class BaseDeltaLakeConnectorSmokeTest
     protected HiveHadoop hiveHadoop;
     private HiveMetastore metastore;
     private TransactionLogAccess transactionLogAccess;
+    private DeltaLakeTableMetadataScheduler metadataScheduler;
 
     protected void environmentSetup() {}
 
@@ -212,6 +214,8 @@ public abstract class BaseDeltaLakeConnectorSmokeTest
                             .putAll(hiveStorageConfiguration())
                             .buildOrThrow());
 
+            metadataScheduler = TestingDeltaLakeUtils.getConnectorService(queryRunner, DeltaLakeTableMetadataScheduler.class);
+
             return queryRunner;
         }
         catch (Throwable e) {
@@ -230,6 +234,8 @@ public abstract class BaseDeltaLakeConnectorSmokeTest
                         .put("delta.metadata.live-files.cache-ttl", TEST_METADATA_CACHE_TTL_SECONDS + "s")
                         .put("hive.metastore-cache-ttl", TEST_METADATA_CACHE_TTL_SECONDS + "s")
                         .put("delta.register-table-procedure.enabled", "true")
+                        .put("delta.metastore.store-table-metadata", "true")
+                        .put("delta.metastore.store-table-metadata-synchronous", "true")
                         .put("hive.metastore.thrift.client.read-timeout", "1m") // read timed out sometimes happens with the default timeout
                         .putAll(deltaStorageConfiguration())
                         .buildOrThrow())
@@ -2962,6 +2968,43 @@ public abstract class BaseDeltaLakeConnectorSmokeTest
         Map<String, String> configuration = metastore.getTable(SCHEMA, tableName).orElseThrow().getParameters();
         assertThat(configuration.get("extra.property.one")).isEqualTo("one");
         assertThat(configuration.get("extra.property.two")).isEqualTo("two");
+        assertThat(configuration.get("dune.schema")).isEqualTo("{\"type\":\"struct\",\"fields\":[{\"name\":\"c\",\"type\":\"string\",\"nullable\":true,\"metadata\":{}}]}");
+        assertUpdate("DROP TABLE " + tableName);
+    }
+
+    @Test
+    public void testDuneTableSizeInMetastore()
+    {
+        String tableName = "test_create_table_dune_schema" + randomNameSuffix();
+
+        assertUpdate("CREATE TABLE " + tableName + " WITH (extra_properties = MAP(ARRAY['extra.property.one', 'extra.property.two'], ARRAY['one', 'two'])) AS SELECT 'b' AS c", 1);
+        Map<String, String> configuration = metastore.getTable(SCHEMA, tableName).orElseThrow().getParameters();
+        assertThat(configuration.get("dune.tableSize")).isEqualTo("194");
+
+        assertUpdate("INSERT INTO " + tableName + " VALUES ('a')", 1);
+        assertUpdate("ALTER TABLE " + tableName + " SET PROPERTIES extra_properties = MAP(ARRAY['dune.property.three'], ARRAY['three'])");
+        Map<String, String> configurationAfterInsert = metastore.getTable(SCHEMA, tableName).orElseThrow().getParameters();
+        assertThat(configurationAfterInsert.get("dune.tableSize")).isEqualTo("388");
+        assertThat(configurationAfterInsert.get("extra.property.one")).isEqualTo("one");
+        assertThat(configurationAfterInsert.get("extra.property.two")).isEqualTo("two");
+        assertThat(configurationAfterInsert.get("dune.property.three")).isEqualTo("three");
+        assertThat(configurationAfterInsert.get("dune.schema")).isEqualTo("{\"type\":\"struct\",\"fields\":[{\"name\":\"c\",\"type\":\"string\",\"nullable\":true,\"metadata\":{}}]}");
+
+        assertUpdate("DROP TABLE " + tableName);
+    }
+
+    @Test
+    public void testDunePropertyInMetastore()
+    {
+        String tableName = "test_create_table_dune_properties" + randomNameSuffix();
+        assertUpdate("CREATE TABLE " + tableName + " (c VARCHAR) WITH (extra_properties = MAP(ARRAY['dune.property.one', 'dune.property.two'], ARRAY['one', 'two']))");
+        assertUpdate("ALTER TABLE " + tableName + " SET PROPERTIES extra_properties = MAP(ARRAY['dune.property.two', 'dune.property.three'], ARRAY['twice', 'three'])");
+        // Metadata syncing is asynchronous, force it to update here
+        metadataScheduler.process();
+        Map<String, String> configuration = metastore.getTable(SCHEMA, tableName).orElseThrow().getParameters();
+        assertThat(configuration.get("dune.property.one")).isEqualTo("one");
+        assertThat(configuration.get("dune.property.two")).isEqualTo("twice");
+        assertThat(configuration.get("dune.property.three")).isEqualTo("three");
         assertThat(configuration.get("dune.schema")).isEqualTo("{\"type\":\"struct\",\"fields\":[{\"name\":\"c\",\"type\":\"string\",\"nullable\":true,\"metadata\":{}}]}");
         assertUpdate("DROP TABLE " + tableName);
     }

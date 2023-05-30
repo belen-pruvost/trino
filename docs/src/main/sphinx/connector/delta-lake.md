@@ -170,6 +170,9 @@ values. Typical usage does not require you to configure them.
   - Store table comments and colum definitions in the metastore. The write
     permission is required to update the metastore.
   - `false`
+* - `delta.metastore.store-table-metadata-synchronous`
+  - Dune-specific: store table comments and definitions synchronously.
+  - `false`
 * - `delta.metastore.store-table-metadata-threads`
   - Number of threads used for storing table metadata in metastore.
   - `5`

@@ -51,6 +51,7 @@ import static com.google.common.util.concurrent.MoreExecutors.newDirectExecutorS
 import static io.airlift.concurrent.Threads.daemonThreadsNamed;
 import static io.airlift.concurrent.Threads.threadsNamed;
 import static io.trino.metastore.Table.TABLE_COMMENT;
+import static io.trino.plugin.deltalake.DeltaLakeMetadata.DUNE_SCHEMA_PROPERTY;
 import static io.trino.plugin.deltalake.DeltaLakeSessionProperties.isStoreTableMetadataInMetastoreEnabled;
 import static io.trino.plugin.deltalake.transactionlog.DeltaLakeSchemaSupport.ColumnMappingMode.NONE;
 import static io.trino.plugin.deltalake.transactionlog.DeltaLakeSchemaSupport.getColumnMetadata;
@@ -75,6 +76,7 @@ public class DeltaLakeTableMetadataScheduler
     private final int storeTableMetadataThreads;
     private final Map<SchemaTableName, TableUpdateInfo> updateInfos = new ConcurrentHashMap<>();
     private final boolean enabled;
+    private final boolean synchronous;
     private final Duration scheduleInterval;
 
     private ExecutorService executor;
@@ -95,6 +97,7 @@ public class DeltaLakeTableMetadataScheduler
         this.storeTableMetadataThreads = config.getStoreTableMetadataThreads();
         requireNonNull(nodeManager, "nodeManager is null");
         this.enabled = config.isStoreTableMetadataEnabled() && nodeManager.getCurrentNode().isCoordinator();
+        this.synchronous = config.isStoreTableMetadataSynchronous();
         this.scheduleInterval = config.getStoreTableMetadataInterval();
     }
 
@@ -111,6 +114,10 @@ public class DeltaLakeTableMetadataScheduler
             return;
         }
         updateInfos.putAll(tableParameters);
+        // Dune-specific: apply synchronously
+        if (synchronous) {
+            process();
+        }
     }
 
     @PostConstruct
@@ -174,7 +181,7 @@ public class DeltaLakeTableMetadataScheduler
         log.debug("Updating table: '%s'", schemaTableName);
         try {
             tableOperationsProvider.createTableOperations(info.session)
-                    .commitToExistingTable(schemaTableName, info.version, info.schemaString, info.tableComment);
+                    .commitToExistingTable(schemaTableName, info.version, info.schemaString, info.tableComment, info.extraProperties);
             log.debug("Replaced table: '%s'", schemaTableName);
         }
         catch (TableNotFoundException e) {
@@ -251,16 +258,18 @@ public class DeltaLakeTableMetadataScheduler
         tableComment.ifPresent(comment -> parameters.put(TABLE_COMMENT, comment));
         parameters.put(TRINO_LAST_TRANSACTION_VERSION, Long.toString(version));
         parameters.put(TRINO_METADATA_SCHEMA_STRING, schemaString);
+        parameters.put(DUNE_SCHEMA_PROPERTY, schemaString);
         return parameters.buildOrThrow();
     }
 
-    public record TableUpdateInfo(ConnectorSession session, long version, String schemaString, Optional<String> tableComment)
+    public record TableUpdateInfo(ConnectorSession session, long version, String schemaString, Optional<String> tableComment, Map<String, String> extraProperties)
     {
         public TableUpdateInfo
         {
             requireNonNull(session, "session is null");
             requireNonNull(schemaString, "schemaString is null");
             requireNonNull(tableComment, "tableComment is null");
+            requireNonNull(extraProperties, "extraProperties is null");
         }
     }
 }

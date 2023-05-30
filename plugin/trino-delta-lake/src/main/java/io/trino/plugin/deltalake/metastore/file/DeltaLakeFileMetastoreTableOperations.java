@@ -38,12 +38,13 @@ public class DeltaLakeFileMetastoreTableOperations
     }
 
     @Override
-    public void commitToExistingTable(SchemaTableName schemaTableName, long version, String schemaString, Optional<String> tableComment)
+    public void commitToExistingTable(SchemaTableName schemaTableName, long version, String schemaString, Optional<String> tableComment, Map<String, String> extraProperties)
     {
         Table currentTable = metastore.getTable(schemaTableName.getSchemaName(), schemaTableName.getTableName())
                 .orElseThrow(() -> new TableNotFoundException(schemaTableName));
         Map<String, String> parameters = ImmutableMap.<String, String>builder()
                 .putAll(currentTable.getParameters())
+                .putAll(extraProperties)
                 .putAll(tableMetadataParameters(version, schemaString, tableComment))
                 .buildKeepingLast();
         Table updatedTable = currentTable.withParameters(parameters);

@@ -54,7 +54,7 @@ public class DeltaLakeGlueMetastoreTableOperations
     }
 
     @Override
-    public void commitToExistingTable(SchemaTableName schemaTableName, long version, String schemaString, Optional<String> tableComment)
+    public void commitToExistingTable(SchemaTableName schemaTableName, long version, String schemaString, Optional<String> tableComment, Map<String, String> extraProperties)
     {
         GetTableRequest getTableRequest = GetTableRequest.builder()
                 .databaseName(schemaTableName.getSchemaName())
