@@ -35,6 +35,8 @@ public class ConnectorViewDefinition
     private final boolean runAsInvoker;
     private final List<CatalogSchemaName> path;
 
+    private final boolean duneSkipViewStalenessCheck;
+
     @JsonCreator
     public ConnectorViewDefinition(
             @JsonProperty("originalSql") String originalSql,
@@ -44,7 +46,8 @@ public class ConnectorViewDefinition
             @JsonProperty("comment") Optional<String> comment,
             @JsonProperty("owner") Optional<String> owner,
             @JsonProperty("runAsInvoker") boolean runAsInvoker,
-            @JsonProperty("path") List<CatalogSchemaName> path)
+            @JsonProperty("path") List<CatalogSchemaName> path,
+            @JsonProperty("duneSkipViewStalenessCheck") boolean duneSkipViewStalenessCheck)
     {
         this.originalSql = requireNonNull(originalSql, "originalSql is null");
         this.catalog = requireNonNull(catalog, "catalog is null");
@@ -63,6 +66,20 @@ public class ConnectorViewDefinition
         if (columns.isEmpty()) {
             throw new IllegalArgumentException("columns list is empty");
         }
+        this.duneSkipViewStalenessCheck = duneSkipViewStalenessCheck;
+    }
+
+    public ConnectorViewDefinition(
+            @JsonProperty("originalSql") String originalSql,
+            @JsonProperty("catalog") Optional<String> catalog,
+            @JsonProperty("schema") Optional<String> schema,
+            @JsonProperty("columns") List<ViewColumn> columns,
+            @JsonProperty("comment") Optional<String> comment,
+            @JsonProperty("owner") Optional<String> owner,
+            @JsonProperty("runAsInvoker") boolean runAsInvoker,
+            @JsonProperty("path") List<CatalogSchemaName> path)
+    {
+        this(originalSql, catalog, schema, columns, comment, owner, runAsInvoker, path, false);
     }
 
     @JsonProperty
@@ -113,6 +130,12 @@ public class ConnectorViewDefinition
         return path;
     }
 
+    @JsonProperty
+    public boolean isDuneSkipViewStalenessCheck()
+    {
+        return duneSkipViewStalenessCheck;
+    }
+
     public ConnectorViewDefinition withoutOwner()
     {
         return new ConnectorViewDefinition(
@@ -123,7 +146,8 @@ public class ConnectorViewDefinition
                 comment,
                 Optional.empty(),
                 runAsInvoker,
-                path);
+                path,
+                duneSkipViewStalenessCheck);
     }
 
     @Override
@@ -138,6 +162,7 @@ public class ConnectorViewDefinition
         schema.ifPresent(value -> joiner.add("schema=" + value));
         joiner.add(path.stream().map(CatalogSchemaName::toString).collect(joining(", ", "path=(", ")")));
         joiner.add("originalSql=[" + originalSql + "]");
+        joiner.add("duneSkipViewStalenessCheck=" + duneSkipViewStalenessCheck);
         return getClass().getSimpleName() + joiner.toString();
     }
 

@@ -246,6 +246,13 @@
                                 </item>
                             </differences>
                         </revapi.differences>
+                        <revapi.ignore>
+                            <item>
+                                <code>java.annotation.removed</code>
+                                <class>io.trino.spi.connector.ConnectorViewDefinition</class>
+                                <justification>The @JsonCreator annotation was intentionally moved to another constructor.</justification>
+                            </item>
+                        </revapi.ignore>
                     </analysisConfiguration>
                 </configuration>
                 <dependencies>

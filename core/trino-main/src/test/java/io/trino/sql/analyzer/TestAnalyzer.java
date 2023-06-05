@@ -3602,6 +3602,12 @@ public class TestAnalyzer
     }
 
     @Test
+    public void testDuneSkipViewStaleness()
+    {
+        analyze("SELECT * FROM dune_v");
+    }
+
+    @Test
     public void testStoredViewAnalysisScoping()
     {
         // the view must not be analyzed using the query context
@@ -7551,6 +7557,19 @@ public class TestAnalyzer
                 Optional.of(Identity.ofUser("user")),
                 ImmutableList.of());
         inSetupTransaction(session -> metadata.createView(session, new QualifiedObjectName(TPCH_CATALOG, "s1", "v2"), viewData2, ImmutableMap.of(), false));
+
+        // stale view with duneSkipViewStalenessCheck = true
+        ViewDefinition viewDataDune = new ViewDefinition(
+                "select a from t1",
+                Optional.of(TPCH_CATALOG),
+                Optional.of("s1"),
+                ImmutableList.of(
+                        new ViewColumn("a", VARCHAR.getTypeId(), Optional.empty())),
+                Optional.of("comment"),
+                Optional.of(Identity.ofUser("user")),
+                ImmutableList.of(),
+                true);
+        inSetupTransaction(session -> metadata.createView(session, new QualifiedObjectName(TPCH_CATALOG, "s1", "dune_v"), viewDataDune, ImmutableMap.of(), false));
 
         // valid view with uppercase column name
         ViewDefinition viewData4 = new ViewDefinition(

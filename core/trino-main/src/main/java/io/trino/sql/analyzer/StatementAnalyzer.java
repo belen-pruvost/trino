@@ -2493,7 +2493,8 @@ class StatementAnalyzer
                     view.getPath(),
                     view.getColumns(),
                     storageTable,
-                    true);
+                    true,
+                    view.isDuneSkipViewStalenessCheck());
         }
 
         private Scope createScopeForView(Table table, QualifiedObjectName name, Optional<Scope> scope, ViewDefinition view)
@@ -2508,7 +2509,8 @@ class StatementAnalyzer
                     view.getPath(),
                     view.getColumns(),
                     Optional.empty(),
-                    false);
+                    false,
+                    view.isDuneSkipViewStalenessCheck());
         }
 
         private Scope createScopeForView(
@@ -2522,7 +2524,8 @@ class StatementAnalyzer
                 List<CatalogSchemaName> path,
                 List<ViewColumn> columns,
                 Optional<TableHandle> storageTable,
-                boolean isMaterializedView)
+                boolean isMaterializedView,
+                boolean duneSkipViewStalenessCheck)
         {
             Statement statement = analysis.getStatement();
             if (statement instanceof CreateView viewStatement) {
@@ -2551,22 +2554,37 @@ class StatementAnalyzer
             RelationType descriptor = analyzeView(query, name, catalog, schema, owner, path, table);
             analysis.unregisterTableForView();
 
-            checkViewStaleness(columns, descriptor.getVisibleFields(), name, table)
-                    .ifPresent(explanation -> { throw semanticException(VIEW_IS_STALE, table, "View '%s' is stale or in invalid state: %s", name, explanation); });
+            List<Field> viewFields;
+            if (duneSkipViewStalenessCheck) {
+                viewFields = descriptor.getVisibleFields().stream()
+                        .map((Field column) -> Field.newQualified(
+                                table.getName(),
+                                column.getName(),
+                                column.getType(),
+                                column.isHidden(),
+                                Optional.of(name),
+                                column.getName(),
+                                column.isAliased()))
+                        .collect(toImmutableList());
+            }
+            else {
+                checkViewStaleness(columns, descriptor.getVisibleFields(), name, table)
+                        .ifPresent(explanation -> { throw semanticException(VIEW_IS_STALE, table, "View '%s' is stale or in invalid state: %s", name, explanation); });
 
-            // Derive the type of the view from the stored definition, not from the analysis of the underlying query.
-            // This is needed in case the underlying table(s) changed and the query in the view now produces types that
-            // are implicitly coercible to the declared view types.
-            List<Field> viewFields = columns.stream()
-                    .map(column -> Field.newQualified(
-                            table.getName(),
-                            Optional.of(column.name()),
-                            getViewColumnType(column, name, table),
-                            false,
-                            Optional.of(name),
-                            Optional.of(column.name()),
-                            false))
-                    .collect(toImmutableList());
+                // Derive the type of the view from the stored definition, not from the analysis of the underlying query.
+                // This is needed in case the underlying table(s) changed and the query in the view now produces types that
+                // are implicitly coercible to the declared view types.
+                viewFields = columns.stream()
+                        .map(column -> Field.newQualified(
+                                table.getName(),
+                                Optional.of(column.name()),
+                                getViewColumnType(column, name, table),
+                                false,
+                                Optional.of(name),
+                                Optional.of(column.name()),
+                                false))
+                        .collect(toImmutableList());
+            }
 
             if (storageTable.isPresent()) {
                 List<Field> storageTableFields = analyzeStorageTable(table, viewFields, storageTable.get());

@@ -35,6 +35,8 @@ public class ViewDefinition
     private final Optional<Identity> runAsIdentity;
     private final List<CatalogSchemaName> path;
 
+    private final boolean duneSkipViewStalenessCheck;
+
     public ViewDefinition(
             String originalSql,
             Optional<String> catalog,
@@ -43,6 +45,19 @@ public class ViewDefinition
             Optional<String> comment,
             Optional<Identity> runAsIdentity,
             List<CatalogSchemaName> path)
+    {
+        this(originalSql, catalog, schema, columns, comment, runAsIdentity, path, false);
+    }
+
+    public ViewDefinition(
+            String originalSql,
+            Optional<String> catalog,
+            Optional<String> schema,
+            List<ViewColumn> columns,
+            Optional<String> comment,
+            Optional<Identity> runAsIdentity,
+            List<CatalogSchemaName> path,
+            boolean duneSkipViewStalenessCheck)
     {
         this.originalSql = requireNonNull(originalSql, "originalSql is null");
         this.catalog = requireNonNull(catalog, "catalog is null");
@@ -53,6 +68,7 @@ public class ViewDefinition
         this.path = requireNonNull(path, "path is null");
         checkArgument(schema.isEmpty() || catalog.isPresent(), "catalog must be present if schema is present");
         checkArgument(!columns.isEmpty(), "columns list is empty");
+        this.duneSkipViewStalenessCheck = duneSkipViewStalenessCheck;
     }
 
     public String getOriginalSql()
@@ -90,6 +106,11 @@ public class ViewDefinition
         return runAsIdentity;
     }
 
+    public boolean isDuneSkipViewStalenessCheck()
+    {
+        return duneSkipViewStalenessCheck;
+    }
+
     public List<CatalogSchemaName> getPath()
     {
         return path;
@@ -107,7 +128,8 @@ public class ViewDefinition
                 comment,
                 runAsIdentity.map(Identity::getUser),
                 runAsIdentity.isEmpty(),
-                path);
+                path,
+                duneSkipViewStalenessCheck);
     }
 
     @Override
