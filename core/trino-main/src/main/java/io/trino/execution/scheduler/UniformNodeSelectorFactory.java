@@ -17,6 +17,7 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Suppliers;
 import com.google.common.cache.CacheBuilder;
 import com.google.common.collect.ImmutableSetMultimap;
+import com.google.common.collect.Streams;
 import com.google.inject.Inject;
 import io.airlift.log.Logger;
 import io.airlift.units.Duration;
@@ -32,13 +33,22 @@ import io.trino.spi.connector.CatalogHandle;
 
 import java.net.InetAddress;
 import java.net.UnknownHostException;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Comparator;
+import java.util.List;
 import java.util.Optional;
+import java.util.OptionalInt;
+import java.util.Random;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Supplier;
+import java.util.stream.Stream;
 
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.collect.ImmutableSet.toImmutableSet;
+import static io.trino.SystemSessionProperties.getDuneMaxWorkerNodes;
+import static io.trino.SystemSessionProperties.getDuneWorkerNodesShuffleSeed;
 import static io.trino.SystemSessionProperties.getMaxUnacknowledgedSplitsPerTask;
 import static io.trino.cache.CacheUtils.uncheckedCacheGet;
 import static io.trino.cache.SafeCaches.buildNonEvictableCache;
@@ -108,13 +118,28 @@ public class UniformNodeSelectorFactory
         // this supplier is thread-safe. TODO: this logic should probably move to the scheduler since the choice of which node to run in should be
         // done as close to when the split is about to be scheduled
         Supplier<NodeMap> nodeMap;
-        if (nodeMapMemoizationDuration.toMillis() > 0) {
-            nodeMap = Suppliers.memoizeWithExpiration(
-                    () -> createNodeMap(catalogHandle),
-                    nodeMapMemoizationDuration.toMillis(), MILLISECONDS);
+        OptionalInt optionalMaxWorkerNodes = getDuneMaxWorkerNodes(session);
+        if (optionalMaxWorkerNodes.isPresent()) {
+            int maxWorkerNodes = optionalMaxWorkerNodes.orElseThrow();
+            int workerShuffleSeed = getDuneWorkerNodesShuffleSeed(session);
+            if (nodeMapMemoizationDuration.toMillis() > 0) {
+                nodeMap = Suppliers.memoizeWithExpiration(
+                        () -> createNodeMap(catalogHandle, maxWorkerNodes, workerShuffleSeed),
+                        nodeMapMemoizationDuration.toMillis(), MILLISECONDS);
+            }
+            else {
+                nodeMap = () -> createNodeMap(catalogHandle, maxWorkerNodes, workerShuffleSeed);
+            }
         }
         else {
-            nodeMap = () -> createNodeMap(catalogHandle);
+            if (nodeMapMemoizationDuration.toMillis() > 0) {
+                nodeMap = Suppliers.memoizeWithExpiration(
+                        () -> createNodeMap(catalogHandle),
+                        nodeMapMemoizationDuration.toMillis(), MILLISECONDS);
+            }
+            else {
+                nodeMap = () -> createNodeMap(catalogHandle);
+            }
         }
 
         return new UniformNodeSelector(
@@ -136,6 +161,39 @@ public class UniformNodeSelectorFactory
         Set<InternalNode> nodes = catalogHandle
                 .map(nodeManager::getActiveCatalogNodes)
                 .orElseGet(() -> nodeManager.getNodes(ACTIVE));
+
+        Set<String> coordinatorNodeIds = nodeManager.getCoordinators().stream()
+                .map(InternalNode::getNodeIdentifier)
+                .collect(toImmutableSet());
+
+        ImmutableSetMultimap.Builder<HostAddress, InternalNode> byHostAndPort = ImmutableSetMultimap.builder();
+        ImmutableSetMultimap.Builder<InetAddress, InternalNode> byHost = ImmutableSetMultimap.builder();
+        for (InternalNode node : nodes) {
+            try {
+                byHostAndPort.put(node.getHostAndPort(), node);
+                byHost.put(node.getInternalAddress(), node);
+            }
+            catch (UnknownHostException e) {
+                if (markInaccessibleNode(node)) {
+                    LOG.warn(e, "Unable to resolve host name for node: %s", node);
+                }
+            }
+        }
+
+        return new NodeMap(byHostAndPort.build(), byHost.build(), ImmutableSetMultimap.of(), coordinatorNodeIds);
+    }
+
+    private NodeMap createNodeMap(Optional<CatalogHandle> catalogHandle, int maxWorkerNodes, int workerNodeShuffleSeed)
+    {
+        Set<InternalNode> nodes = catalogHandle
+                .map(nodeManager::getActiveCatalogNodes)
+                .orElseGet(() -> nodeManager.getNodes(ACTIVE));
+
+        Stream<InternalNode> coordinators = nodes.stream().filter(InternalNode::isCoordinator);
+        // Sort set to make node selection deterministic based on the seed
+        List<InternalNode> workers = new ArrayList<>(nodes.stream().filter(node -> !node.isCoordinator()).sorted(Comparator.comparing(InternalNode::getNodeIdentifier)).toList());
+        Collections.shuffle(workers, new Random(workerNodeShuffleSeed));
+        nodes = Streams.concat(coordinators, workers.stream().limit(maxWorkerNodes)).collect(toImmutableSet());
 
         Set<String> coordinatorNodeIds = nodeManager.getCoordinators().stream()
                 .map(InternalNode::getNodeIdentifier)

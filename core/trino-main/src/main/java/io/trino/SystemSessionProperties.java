@@ -114,6 +114,8 @@ public final class SystemSessionProperties
     public static final String PUSH_PARTIAL_AGGREGATION_THROUGH_JOIN = "push_partial_aggregation_through_join";
     public static final String ALLOW_UNSAFE_PUSHDOWN = "allow_unsafe_pushdown";
     public static final String PRE_AGGREGATE_CASE_AGGREGATIONS_ENABLED = "pre_aggregate_case_aggregations_enabled";
+    public static final String DUNE_MAX_WORKER_NODES = "dune_max_worker_nodes";
+    public static final String DUNE_WORKER_NODES_SHUFFLE_SEED = "dune_worker_node_shuffle_seed";
     public static final String FORCE_SINGLE_NODE_OUTPUT = "force_single_node_output";
     public static final String FILTER_AND_PROJECT_MIN_OUTPUT_PAGE_SIZE = "filter_and_project_min_output_page_size";
     public static final String FILTER_AND_PROJECT_MIN_OUTPUT_PAGE_ROW_COUNT = "filter_and_project_min_output_page_row_count";
@@ -534,6 +536,20 @@ public final class SystemSessionProperties
                         PRE_AGGREGATE_CASE_AGGREGATIONS_ENABLED,
                         "Pre-aggregate rows before GROUP BY with multiple CASE aggregations on same column",
                         optimizerConfig.isPreAggregateCaseAggregationsEnabled(),
+                        false),
+                new PropertyMetadata<>(
+                        DUNE_MAX_WORKER_NODES,
+                        "Maximum number of drivers per task",
+                        INTEGER,
+                        Integer.class,
+                        null,
+                        false,
+                        value -> validateIntegerValue(value, DUNE_MAX_WORKER_NODES, 0, true),
+                        object -> object),
+                integerProperty(
+                        DUNE_WORKER_NODES_SHUFFLE_SEED,
+                        "Seed for shuffling the worker nodes to pick",
+                        0,
                         false),
                 booleanProperty(
                         FORCE_SINGLE_NODE_OUTPUT,
@@ -1404,6 +1420,20 @@ public final class SystemSessionProperties
     public static boolean isPreAggregateCaseAggregationsEnabled(Session session)
     {
         return session.getSystemProperty(PRE_AGGREGATE_CASE_AGGREGATIONS_ENABLED, Boolean.class);
+    }
+
+    public static OptionalInt getDuneMaxWorkerNodes(Session session)
+    {
+        Integer value = session.getSystemProperty(DUNE_MAX_WORKER_NODES, Integer.class);
+        if (value == null) {
+            return OptionalInt.empty();
+        }
+        return OptionalInt.of(value);
+    }
+
+    public static int getDuneWorkerNodesShuffleSeed(Session session)
+    {
+        return session.getSystemProperty(DUNE_WORKER_NODES_SHUFFLE_SEED, Integer.class);
     }
 
     public static boolean isForceSingleNodeOutput(Session session)
