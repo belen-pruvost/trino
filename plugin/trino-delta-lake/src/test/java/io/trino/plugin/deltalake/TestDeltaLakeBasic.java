@@ -316,7 +316,7 @@ public class TestDeltaLakeBasic
                     ImmutableList.of(new SqlDate((int) LocalDate.of(1970, 1, 1).toEpochDay()), new SqlDate((int) LocalDate.of(9999, 12, 31).toEpochDay())));
             testPartitionValuesParsedCheckpoint(
                     mode,
-                    "timestamp",
+                    "timestamp(6)",
                     ImmutableList.of("TIMESTAMP '1970-01-01 00:00:00'", "TIMESTAMP '1970-01-02 00:00:00'"),
                     ImmutableList.of(SqlTimestamp.newInstance(3, 0, 0), SqlTimestamp.newInstance(3, 86400000000L, 0)));
             ZonedDateTime epochPlus1Day = LocalDateTime.of(1970, 1, 2, 0, 0, 0).atZone(UTC);

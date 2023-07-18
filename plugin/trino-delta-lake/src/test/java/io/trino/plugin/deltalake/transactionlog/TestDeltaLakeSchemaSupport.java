@@ -29,6 +29,8 @@ import io.trino.spi.type.CharType;
 import io.trino.spi.type.DecimalType;
 import io.trino.spi.type.MapType;
 import io.trino.spi.type.RowType;
+import io.trino.spi.type.TimestampType;
+import io.trino.spi.type.TimestampWithTimeZoneType;
 import io.trino.spi.type.TypeOperators;
 import io.trino.spi.type.VarcharType;
 import org.junit.jupiter.api.Test;
@@ -44,6 +46,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.OptionalInt;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.stream.IntStream;
 
 import static com.google.common.collect.ImmutableList.toImmutableList;
 import static com.google.common.io.Resources.getResource;
@@ -58,10 +61,10 @@ import static io.trino.spi.type.DoubleType.DOUBLE;
 import static io.trino.spi.type.IntegerType.INTEGER;
 import static io.trino.spi.type.RealType.REAL;
 import static io.trino.spi.type.SmallintType.SMALLINT;
-import static io.trino.spi.type.TimestampType.TIMESTAMP_MILLIS;
-import static io.trino.spi.type.TimestampType.TIMESTAMP_SECONDS;
+import static io.trino.spi.type.TimestampType.TIMESTAMP_MICROS;
+import static io.trino.spi.type.TimestampType.createTimestampType;
 import static io.trino.spi.type.TimestampWithTimeZoneType.TIMESTAMP_TZ_MILLIS;
-import static io.trino.spi.type.TimestampWithTimeZoneType.TIMESTAMP_TZ_SECONDS;
+import static io.trino.spi.type.TimestampWithTimeZoneType.createTimestampWithTimeZoneType;
 import static io.trino.spi.type.TinyintType.TINYINT;
 import static io.trino.spi.type.VarbinaryType.VARBINARY;
 import static io.trino.spi.type.VarcharType.VARCHAR;
@@ -284,14 +287,26 @@ public class TestDeltaLakeSchemaSupport
         assertThatCode(() -> DeltaLakeSchemaSupport.validateType(new MapType(TIMESTAMP_TZ_MILLIS, TIMESTAMP_TZ_MILLIS, new TypeOperators()))).doesNotThrowAnyException();
         assertThatCode(() -> DeltaLakeSchemaSupport.validateType(RowType.anonymous(ImmutableList.of(TIMESTAMP_TZ_MILLIS)))).doesNotThrowAnyException();
         assertThatCode(() -> DeltaLakeSchemaSupport.validateType(new ArrayType(TIMESTAMP_TZ_MILLIS))).doesNotThrowAnyException();
+        assertThatCode(() -> DeltaLakeSchemaSupport.validateType(new ArrayType(TIMESTAMP_MICROS))).doesNotThrowAnyException();
+        assertThatCode(() -> DeltaLakeSchemaSupport.validateType(new MapType(TIMESTAMP_MICROS, TIMESTAMP_MICROS, new TypeOperators()))).doesNotThrowAnyException();
+        assertThatCode(() -> DeltaLakeSchemaSupport.validateType(RowType.anonymous(ImmutableList.of(TIMESTAMP_MICROS)))).doesNotThrowAnyException();
+        assertThatCode(() -> DeltaLakeSchemaSupport.validateType(new ArrayType(TIMESTAMP_MICROS))).doesNotThrowAnyException();
     }
 
     @Test
     public void testValidateTypeFailsOnUnsupportedPrimitiveType()
     {
+        // Dune-specific Timestamp types support:
+        // We support timestamp without time zone of precisions 0-3, and they get coerced to TIMESTAMP_TZ_MILLIS.
+        // We also support timestamp without time zone of precisions 4-12, and they get coerced to TIMESTAMP_MICROS.
+        // Wesupport timestamp with time zone of precisions 0-3, and they get coerced to TIMESTAMP_TZ_MILLIS.
+        // Other timestamp with time zone types (with precisions 4-12) are not supported.
+        // When DeltaLakeSchemaSupport.validateType() is called, we only expect TIMESTAMP_TZ_MILLIS and TIMESTAMP_MICROS for Timestamp types.
+        IntStream.rangeClosed(0, 2).forEach(i -> assertThatCode(() -> DeltaLakeSchemaSupport.validateType(createTimestampWithTimeZoneType(i))).hasMessage("Unsupported type: timestamp(" + i + ") with time zone"));
+        IntStream.rangeClosed(4, 12).forEach(i -> assertThatCode(() -> DeltaLakeSchemaSupport.validateType(createTimestampWithTimeZoneType(i))).hasMessage("Unsupported type: timestamp(" + i + ") with time zone"));
+        IntStream.rangeClosed(0, 5).forEach(i -> assertThatCode(() -> DeltaLakeSchemaSupport.validateType(createTimestampType(i))).hasMessage("Unsupported type: timestamp(" + i + ")"));
+        IntStream.rangeClosed(7, 12).forEach(i -> assertThatCode(() -> DeltaLakeSchemaSupport.validateType(createTimestampType(i))).hasMessage("Unsupported type: timestamp(" + i + ")"));
         assertThatCode(() -> DeltaLakeSchemaSupport.validateType(CharType.createCharType(3))).hasMessage("Unsupported type: " + CharType.createCharType(3));
-        assertThatCode(() -> DeltaLakeSchemaSupport.validateType(TIMESTAMP_MILLIS)).hasMessage("Unsupported type: " + TIMESTAMP_MILLIS);
-        assertThatCode(() -> DeltaLakeSchemaSupport.validateType(TIMESTAMP_SECONDS)).hasMessage("Unsupported type: " + TIMESTAMP_SECONDS);
         assertThatCode(() -> DeltaLakeSchemaSupport.validateType(INTERVAL_DAY_TIME)).hasMessage("Unsupported type: " + INTERVAL_DAY_TIME);
         assertThatCode(() -> DeltaLakeSchemaSupport.validateType(INTERVAL_YEAR_MONTH)).hasMessage("Unsupported type: " + INTERVAL_YEAR_MONTH);
     }
@@ -299,8 +314,25 @@ public class TestDeltaLakeSchemaSupport
     @Test
     public void testTimestampNestedInStructTypeIsNotSupported()
     {
-        assertThatCode(() -> DeltaLakeSchemaSupport.validateType(new MapType(TIMESTAMP_TZ_SECONDS, TIMESTAMP_TZ_SECONDS, new TypeOperators()))).hasMessage("Unsupported type: timestamp(0) with time zone");
-        assertThatCode(() -> DeltaLakeSchemaSupport.validateType(RowType.anonymous(ImmutableList.of(TIMESTAMP_TZ_SECONDS)))).hasMessage("Unsupported type: timestamp(0) with time zone");
-        assertThatCode(() -> DeltaLakeSchemaSupport.validateType(new ArrayType(TIMESTAMP_TZ_SECONDS))).hasMessage("Unsupported type: timestamp(0) with time zone");
+        IntStream.rangeClosed(0, 2).forEach(i -> unsupportedNestedTimestampWithTimeZone(i, "Unsupported type: timestamp(" + i + ") with time zone"));
+        IntStream.rangeClosed(4, 12).forEach(i -> unsupportedNestedTimestampWithTimeZone(i, "Unsupported type: timestamp(" + i + ") with time zone"));
+        IntStream.rangeClosed(0, 5).forEach(i -> unsupportedNestedTimestamp(i, "Unsupported type: timestamp(" + i + ")"));
+        IntStream.rangeClosed(7, 12).forEach(i -> unsupportedNestedTimestamp(i, "Unsupported type: timestamp(" + i + ")"));
+    }
+
+    private void unsupportedNestedTimestamp(int precision, String errorMessage)
+    {
+        TimestampType t = createTimestampType(precision);
+        assertThatCode(() -> DeltaLakeSchemaSupport.validateType(new MapType(t, t, new TypeOperators()))).hasMessage(errorMessage);
+        assertThatCode(() -> DeltaLakeSchemaSupport.validateType(RowType.anonymous(ImmutableList.of(t)))).hasMessage(errorMessage);
+        assertThatCode(() -> DeltaLakeSchemaSupport.validateType(new ArrayType(t))).hasMessage(errorMessage);
+    }
+
+    private void unsupportedNestedTimestampWithTimeZone(int precision, String errorMessage)
+    {
+        TimestampWithTimeZoneType t = createTimestampWithTimeZoneType(precision);
+        assertThatCode(() -> DeltaLakeSchemaSupport.validateType(new MapType(t, t, new TypeOperators()))).hasMessage(errorMessage);
+        assertThatCode(() -> DeltaLakeSchemaSupport.validateType(RowType.anonymous(ImmutableList.of(t)))).hasMessage(errorMessage);
+        assertThatCode(() -> DeltaLakeSchemaSupport.validateType(new ArrayType(t))).hasMessage(errorMessage);
     }
 }

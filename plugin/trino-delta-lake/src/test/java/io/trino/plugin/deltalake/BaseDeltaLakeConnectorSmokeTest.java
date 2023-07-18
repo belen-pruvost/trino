@@ -78,6 +78,7 @@ import static io.trino.plugin.deltalake.TestingDeltaLakeUtils.getConnectorServic
 import static io.trino.plugin.deltalake.TestingDeltaLakeUtils.getTableActiveFiles;
 import static io.trino.plugin.deltalake.transactionlog.TransactionLogUtil.TRANSACTION_LOG_DIRECTORY;
 import static io.trino.plugin.hive.TestingThriftHiveMetastoreBuilder.testingThriftHiveMetastoreBuilder;
+import static io.trino.spi.type.TimeZoneKey.getTimeZoneKey;
 import static io.trino.testing.QueryAssertions.assertEqualsIgnoreOrder;
 import static io.trino.testing.QueryAssertions.getTrinoExceptionCause;
 import static io.trino.testing.TestingAccessControlManager.TestingPrivilegeType.DELETE_TABLE;
@@ -3006,6 +3007,173 @@ public abstract class BaseDeltaLakeConnectorSmokeTest
         assertThat(configuration.get("dune.property.two")).isEqualTo("twice");
         assertThat(configuration.get("dune.property.three")).isEqualTo("three");
         assertThat(configuration.get("dune.schema")).isEqualTo("{\"type\":\"struct\",\"fields\":[{\"name\":\"c\",\"type\":\"string\",\"nullable\":true,\"metadata\":{}}]}");
+        assertUpdate("DROP TABLE " + tableName);
+    }
+
+    @Test
+    public void testUnsupportedTimestampWithTimezoneWithPrecision()
+    {
+        IntStream.rangeClosed(4, 12).forEach(i -> assertQueryFails(
+                format("CREATE TABLE precision_" + i + " (ts_tz TIMESTAMP(" + i + ") WITH TIME ZONE) WITH (location = '%s')",
+                        getLocationForTable(bucketName, "precision_" + i)),
+                "Unsupported type: .*"));
+    }
+
+    @Test
+    public void testTimestampsWithTimezoneWithPrecision()
+    {
+        // the session timezone affects the result
+        assertThat(getSession().getTimeZoneKey().equals(getTimeZoneKey("Pacific/Apia"))).isTrue();
+
+        String tableName = "test_write_timestamps_with_timezone_with_precision_" + randomNameSuffix();
+        assertUpdate("CREATE TABLE " + tableName + " AS " +
+                "SELECT CAST('2023-07-17 00:00:00 UTC' AS TIMESTAMP(0) WITH TIME ZONE) a, " +
+                " CAST('2023-07-17 00:00:00.1 UTC' AS TIMESTAMP(1) WITH TIME ZONE) b, " +
+                " CAST('2023-07-17 00:00:00.12 UTC' AS TIMESTAMP(2) WITH TIME ZONE) c, " +
+                " CAST('2023-07-17 00:00:00.123 UTC' AS TIMESTAMP(3) WITH TIME ZONE) d," +
+                " TIMESTAMP '2023-07-17 00:00:00 UTC' e," +
+                " TIMESTAMP '2023-07-17 00:00:00.1 UTC' f," +
+                " TIMESTAMP '2023-07-17 00:00:00.12 UTC' g," +
+                " TIMESTAMP '2023-07-17 00:00:00.123 UTC' h", 1);
+        assertThat(query("SELECT a, b, c, d, e, f, g, h, " +
+                // The following 8 rows do:
+                // cast down from TIMESTAMP WITH TIMEZONE to TIMESTAMP,
+                // then back to TIMESTAMP WITH TIME ZONE,
+                // and then adjust the time zone to UTC.
+                // The middle transformation, cast to TIMESTAMP WITH TIME ZONE,
+                // applies the session timezone, which is Pacific/Apia.
+                // Therefore the result value is 2023-07-16 11:00 UTC and not 2023-07-17 00:00 UTC
+                " CAST(a AS TIMESTAMP(0)) AT TIME ZONE 'UTC'," +
+                " CAST(b AS TIMESTAMP(1)) AT TIME ZONE 'UTC'," +
+                " CAST(c AS TIMESTAMP(2)) AT TIME ZONE 'UTC'," +
+                " CAST(d AS TIMESTAMP(3)) AT TIME ZONE 'UTC'," +
+                " CAST(e AS TIMESTAMP(0)) AT TIME ZONE 'UTC'," +
+                " CAST(f AS TIMESTAMP(1)) AT TIME ZONE 'UTC'," +
+                " CAST(g AS TIMESTAMP(2)) AT TIME ZONE 'UTC'," +
+                " CAST(h AS TIMESTAMP(3)) AT TIME ZONE 'UTC'," +
+                " a = timestamp '2023-07-17 00:00:00.000000 UTC'," +
+                " b = timestamp '2023-07-17 00:00:00.100000 UTC'," +
+                " c = timestamp '2023-07-17 00:00:00.120000 UTC'," +
+                " d = timestamp '2023-07-17 00:00:00.123000 UTC'," +
+                " e = timestamp '2023-07-17 00:00:00.000000 UTC'," +
+                " f = timestamp '2023-07-17 00:00:00.100000 UTC'," +
+                " g = timestamp '2023-07-17 00:00:00.120000 UTC'," +
+                " h = timestamp '2023-07-17 00:00:00.123000 UTC'" +
+                " FROM " + tableName))
+                .matches("VALUES (CAST('2023-07-17 UTC' AS TIMESTAMP(3) WITH TIME ZONE)," +
+                        " CAST('2023-07-17 00:00:00.1 UTC' AS TIMESTAMP(3) WITH TIME ZONE)," +
+                        " CAST('2023-07-17 00:00:00.12 UTC' AS TIMESTAMP(3) WITH TIME ZONE)," +
+                        " CAST('2023-07-17 00:00:00.123 UTC' AS TIMESTAMP(3) WITH TIME ZONE)," +
+                        " CAST('2023-07-17 00:00:00 UTC' AS TIMESTAMP(3) WITH TIME ZONE)," +
+                        " CAST('2023-07-17 00:00:00.1 UTC' AS TIMESTAMP(3) WITH TIME ZONE)," +
+                        " CAST('2023-07-17 00:00:00.12 UTC' AS TIMESTAMP(3) WITH TIME ZONE)," +
+                        " CAST('2023-07-17 00:00:00.123 UTC' AS TIMESTAMP(3) WITH TIME ZONE)," +
+                        " CAST('2023-07-16 11:00 UTC' AS TIMESTAMP(0) WITH TIME ZONE)," +
+                        " CAST('2023-07-16 11:00:00.1 UTC' AS TIMESTAMP(1) WITH TIME ZONE)," +
+                        " CAST('2023-07-16 11:00:00.12 UTC' AS TIMESTAMP(2) WITH TIME ZONE)," +
+                        " CAST('2023-07-16 11:00:00.123 UTC' AS TIMESTAMP(3) WITH TIME ZONE )," +
+                        " CAST('2023-07-16 11:00 UTC' AS TIMESTAMP(0) WITH TIME ZONE)," +
+                        " CAST('2023-07-16 11:00:00.1 UTC' AS TIMESTAMP(1) WITH TIME ZONE)," +
+                        " CAST('2023-07-16 11:00:00.12 UTC' AS TIMESTAMP(2) WITH TIME ZONE)," +
+                        " CAST('2023-07-16 11:00:00.123 UTC' AS TIMESTAMP(3) WITH TIME ZONE)," +
+                        " true," +
+                        " true," +
+                        " true," +
+                        " true," +
+                        " true," +
+                        " true," +
+                        " true," +
+                        " true)");
+
+        assertUpdate("DROP TABLE " + tableName);
+    }
+
+    @Test
+    public void testTimestampsWithPrecisionZeroToThree()
+    {
+        // the session timezone affects the result
+        assertThat(getSession().getTimeZoneKey().equals(getTimeZoneKey("Pacific/Apia"))).isTrue();
+
+        String tableName = "test_write_timestamps_with_precision_zero_three_" + randomNameSuffix();
+        assertUpdate("CREATE TABLE " + tableName + " AS " +
+                // The type of the created column is TIMESTAMP(3) WITH TIME ZONE.
+                // The inserted values are cast to TIMESTAMP(3) WITH TIME ZONE,
+                // and during that cast the session timezone is applied (Pacific/Apia).
+                // When reading the values back from the table, we get them adjusted to the UTC timezone,
+                // so instead of 2023-07-17 00:00:00 UTC we get 2023-07-16 11:00:00 UTC.
+                "SELECT CAST('2023-07-17 00:00:00' AS TIMESTAMP(0)) a, " +
+                " CAST('2023-07-17 00:00:00.1' AS TIMESTAMP(1)) b, " +
+                " CAST('2023-07-17 00:00:00.12' AS TIMESTAMP(2)) c, " +
+                " CAST('2023-07-17 00:00:00.123' AS TIMESTAMP(3)) d," +
+                " TIMESTAMP '2023-07-17 00:00:00' e," +
+                " TIMESTAMP '2023-07-17 00:00:00.1' f," +
+                " TIMESTAMP '2023-07-17 00:00:00.12' g," +
+                " TIMESTAMP '2023-07-17 00:00:00.123' h", 1);
+        assertThat(query("SELECT a, b, c, d, e, f, g, h, " +
+                " CAST(a AS TIMESTAMP(0))," +
+                " CAST(b AS TIMESTAMP(1))," +
+                " CAST(c AS TIMESTAMP(2))," +
+                " CAST(d AS TIMESTAMP(3))," +
+                " CAST(e AS TIMESTAMP(0))," +
+                " CAST(f AS TIMESTAMP(1))," +
+                " CAST(g AS TIMESTAMP(2))," +
+                " CAST(h AS TIMESTAMP(3))," +
+                " a = timestamp '2023-07-16 11:00:00.000000 UTC'," +
+                " b = timestamp '2023-07-16 11:00:00.100000 UTC'," +
+                " c = timestamp '2023-07-16 11:00:00.120000 UTC'," +
+                " d = timestamp '2023-07-16 11:00:00.123000 UTC'," +
+                " e = timestamp '2023-07-16 11:00:00.000000 UTC'," +
+                " f = timestamp '2023-07-16 11:00:00.100000 UTC'," +
+                " g = timestamp '2023-07-16 11:00:00.120000 UTC'," +
+                " h = timestamp '2023-07-16 11:00:00.123000 UTC'" +
+                " FROM " + tableName))
+                .matches("VALUES (CAST('2023-07-16 11:00:00 UTC' AS TIMESTAMP(3) WITH TIME ZONE)," +
+                        " CAST('2023-07-16 11:00:00.1 UTC' AS TIMESTAMP(3) WITH TIME ZONE)," +
+                        " CAST('2023-07-16 11:00:00.12 UTC' AS TIMESTAMP(3) WITH TIME ZONE)," +
+                        " CAST('2023-07-16 11:00:00.123 UTC' AS TIMESTAMP(3) WITH TIME ZONE)," +
+                        " CAST('2023-07-16 11:00:00 UTC' AS TIMESTAMP(3) WITH TIME ZONE)," +
+                        " CAST('2023-07-16 11:00:00.1 UTC' AS TIMESTAMP(3) WITH TIME ZONE)," +
+                        " CAST('2023-07-16 11:00:00.12 UTC' AS TIMESTAMP(3) WITH TIME ZONE)," +
+                        " CAST('2023-07-16 11:00:00.123 UTC' AS TIMESTAMP(3) WITH TIME ZONE)," +
+                        " CAST('2023-07-16 11:00 UTC' AS TIMESTAMP(0))," +
+                        " CAST('2023-07-16 11:00:00.1 UTC' AS TIMESTAMP(1))," +
+                        " CAST('2023-07-16 11:00:00.12 UTC' AS TIMESTAMP(2))," +
+                        " CAST('2023-07-16 11:00:00.123 UTC' AS TIMESTAMP(3))," +
+                        " CAST('2023-07-16 11:00 UTC' AS TIMESTAMP(0))," +
+                        " CAST('2023-07-16 11:00:00.1 UTC' AS TIMESTAMP(1))," +
+                        " CAST('2023-07-16 11:00:00.12 UTC' AS TIMESTAMP(2))," +
+                        " CAST('2023-07-16 11:00:00.123 UTC' AS TIMESTAMP(3))," +
+                        " true," +
+                        " true," +
+                        " true," +
+                        " true," +
+                        " true," +
+                        " true," +
+                        " true," +
+                        " true)");
+
+        assertUpdate("DROP TABLE " + tableName);
+    }
+
+    @Test
+    public void testTimestampsWithPrecisionFourToTwelve()
+    {
+        String tableName = "test_write_timestamps_with_precision_four_twelve" + randomNameSuffix();
+        assertUpdate("CREATE TABLE " + tableName + " AS " +
+                        // The type of the created columns is TIMESTAMP(6).
+                        "SELECT " +
+                        "CAST('2023-07-17 00:00:00.1234' AS TIMESTAMP(4)) a, " +
+                        "CAST('2023-07-17 00:00:00.123456' AS TIMESTAMP(6)) b, " +
+                        "CAST('2023-07-17 00:00:00.123456789' AS TIMESTAMP(9)) c, " +
+                        "CAST('2023-07-17 00:00:00.123456789012' AS TIMESTAMP(12)) d"
+                , 1);
+        assertThat(query("SELECT a, typeof(a), b, typeof(b), c, typeof(c), d, typeof(d) FROM " + tableName))
+                .matches("VALUES (" +
+                        "TIMESTAMP '2023-07-17 00:00:00.123400', VARCHAR 'timestamp(6)', " +
+                        "TIMESTAMP '2023-07-17 00:00:00.123456', VARCHAR 'timestamp(6)', " +
+                        "TIMESTAMP '2023-07-17 00:00:00.123457', VARCHAR 'timestamp(6)', " +
+                        "TIMESTAMP '2023-07-17 00:00:00.123457', VARCHAR 'timestamp(6)')");
+
         assertUpdate("DROP TABLE " + tableName);
     }
 

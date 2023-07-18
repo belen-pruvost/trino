@@ -344,6 +344,7 @@ import static io.trino.spi.type.IntegerType.INTEGER;
 import static io.trino.spi.type.RealType.REAL;
 import static io.trino.spi.type.SmallintType.SMALLINT;
 import static io.trino.spi.type.TimestampType.TIMESTAMP_MICROS;
+import static io.trino.spi.type.TimestampWithTimeZoneType.TIMESTAMP_TZ_MILLIS;
 import static io.trino.spi.type.TinyintType.TINYINT;
 import static io.trino.spi.type.TypeUtils.isFloatingPointNaN;
 import static io.trino.spi.type.VarbinaryType.VARBINARY;
@@ -724,7 +725,20 @@ public class DeltaLakeMetadata
 
     private Type coerceType(Type type)
     {
-        if (type instanceof TimestampType) {
+        // Dune-specific: additionally to precision 3 supported in the upstream, we also support precisions 0, 1, and 2,
+        // and they get coerced to TIMESTAMP_TZ_MILLIS.
+        // Precisions 4+ not supported: we don't instruct here to coerce them,
+        // so they will stay as-is and will be rejected in DeltaLakeSchemaSupport.validateType()
+        if (type instanceof TimestampWithTimeZoneType timestampWithTimeZoneType && timestampWithTimeZoneType.getPrecision() <= 3) {
+            return TIMESTAMP_TZ_MILLIS;
+        }
+        // The upstream supports all precisions 0-12, and coerces them to TIMESTAMP_MICROS.
+        // Dune-specific: we also support all precisions 0-12. Precisions 0-3 get coerced to TIMESTAMP_TZ_MILLIS,
+        // and precisions 4-12 get coerced to TIMESTAMP_MICROS.
+        if (type instanceof TimestampType timestampType) {
+            if (timestampType.getPrecision() <= 3) {
+                return TIMESTAMP_TZ_MILLIS;
+            }
             return TIMESTAMP_MICROS;
         }
         if (type instanceof CharType) {
