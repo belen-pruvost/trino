@@ -2828,6 +2828,7 @@
                         <exclude>**/*jmhTest*.java</exclude>
                         <exclude>**/*jmhType*.java</exclude>
                     </excludes>
+                    <excludedGroups>DuneExcludeCI</excludedGroups>
                 </configuration>
             </plugin>
         </plugins>

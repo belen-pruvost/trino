@@ -25,6 +25,7 @@ import io.trino.spi.block.TestingBlockEncodingSerde;
 import io.trino.spi.type.Type;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
 
@@ -108,6 +109,7 @@ public class TestFileSingleStreamSpillerFactory
         assertThat(listFiles(spillPath2.toPath())).isEmpty();
     }
 
+    @Tag("DuneExcludeCI") // CI does not set file permissions correctly
     @Test
     public void testDistributesSpillOverPathsBadDisk()
             throws Exception
@@ -196,6 +198,7 @@ public class TestFileSingleStreamSpillerFactory
         assertThat(listFiles(spillPath2.toPath())).hasSize(2);
     }
 
+    @Tag("DuneExcludeCI") // CI does not set file permissions correctly
     @Test
     public void testCacheInvalidatedOnBadDisk()
             throws Exception
