@@ -83,6 +83,7 @@ public class InternalResourceGroup
     private final ResourceGroupId id;
     private final BiConsumer<InternalResourceGroup, Boolean> jmxExportListener;
     private final Executor executor;
+    private final boolean duneUseWeightedQueries;
 
     // Configuration
     // =============
@@ -138,14 +139,20 @@ public class InternalResourceGroup
 
     public InternalResourceGroup(String name, BiConsumer<InternalResourceGroup, Boolean> jmxExportListener, Executor executor)
     {
-        this(Optional.empty(), name, jmxExportListener, executor);
+        this(Optional.empty(), name, jmxExportListener, executor, false);
     }
 
-    private InternalResourceGroup(Optional<InternalResourceGroup> parent, String name, BiConsumer<InternalResourceGroup, Boolean> jmxExportListener, Executor executor)
+    public InternalResourceGroup(String name, BiConsumer<InternalResourceGroup, Boolean> jmxExportListener, Executor executor, boolean duneUseWeightedQueries)
+    {
+        this(Optional.empty(), name, jmxExportListener, executor, duneUseWeightedQueries);
+    }
+
+    private InternalResourceGroup(Optional<InternalResourceGroup> parent, String name, BiConsumer<InternalResourceGroup, Boolean> jmxExportListener, Executor executor, boolean duneUseWeightedQueries)
     {
         this.parent = requireNonNull(parent, "parent is null");
         this.jmxExportListener = requireNonNull(jmxExportListener, "jmxExportListener is null");
         this.executor = requireNonNull(executor, "executor is null");
+        this.duneUseWeightedQueries = duneUseWeightedQueries;
         requireNonNull(name, "name is null");
         if (parent.isPresent()) {
             id = new ResourceGroupId(parent.get().id, name);
@@ -645,7 +652,7 @@ public class InternalResourceGroup
             if (subGroups.containsKey(name)) {
                 return subGroups.get(name);
             }
-            InternalResourceGroup subGroup = new InternalResourceGroup(Optional.of(this), name, jmxExportListener, executor);
+            InternalResourceGroup subGroup = new InternalResourceGroup(Optional.of(this), name, jmxExportListener, executor, duneUseWeightedQueries);
             // Sub group must use query priority to ensure ordering
             if (schedulingPolicy == QUERY_PRIORITY) {
                 subGroup.setSchedulingPolicy(QUERY_PRIORITY);
@@ -698,7 +705,7 @@ public class InternalResourceGroup
             queuedQueries.addOrUpdate(query, getQueryPriority(query.getSession()));
             InternalResourceGroup group = this;
             while (group.parent.isPresent()) {
-                group.parent.get().descendantQueuedQueries++;
+                group.parent.get().descendantQueuedQueries += group.getQueryWeight();
                 group = group.parent.get();
             }
             updateEligibility();
@@ -736,7 +743,7 @@ public class InternalResourceGroup
             group.getStartedQueries().update(1);
             while (group.parent.isPresent()) {
                 InternalResourceGroup parent = group.parent.get();
-                parent.descendantRunningQueries++;
+                parent.descendantRunningQueries += group.getQueryWeight();
                 parent.dirtySubGroups.add(group);
                 parent.getStartedQueries().update(1);
                 group = parent;
@@ -800,7 +807,7 @@ public class InternalResourceGroup
                     group.cachedResourceUsage = group.cachedResourceUsage.add(delta);
                     InternalResourceGroup parent = group.parent.orElse(null);
                     if (parent != null) {
-                        parent.descendantRunningQueries--;
+                        parent.descendantRunningQueries -= group.getQueryWeight();
                         if (parent.descendantRunningQueries == 0) {
                             parent.dirtySubGroups.remove(group);
                         }
@@ -813,7 +820,7 @@ public class InternalResourceGroup
                 queuedQueries.remove(query);
                 InternalResourceGroup group = this;
                 while (group.parent.isPresent()) {
-                    group.parent.get().descendantQueuedQueries--;
+                    group.parent.get().descendantQueuedQueries -= group.getQueryWeight();
                     group = group.parent.get();
                 }
             }
@@ -912,13 +919,18 @@ public class InternalResourceGroup
             }
             lastStartMillis = currentTime;
 
-            descendantQueuedQueries--;
+            descendantQueuedQueries -= subGroup.getQueryWeight();
             // Don't call updateEligibility here, as we're in a recursive call, and don't want to repeatedly update our ancestors.
             if (subGroup.isEligibleToStartNext()) {
                 addOrUpdateSubGroup(subGroup);
             }
             return true;
         }
+    }
+
+    private int getQueryWeight()
+    {
+        return duneUseWeightedQueries ? getSchedulingWeight() : 1;
     }
 
     private void addOrUpdateSubGroup(Queue<InternalResourceGroup> queue, InternalResourceGroup group)

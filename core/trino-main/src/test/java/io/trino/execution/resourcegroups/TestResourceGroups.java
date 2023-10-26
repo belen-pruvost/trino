@@ -40,6 +40,7 @@ import static com.google.common.util.concurrent.MoreExecutors.directExecutor;
 import static io.airlift.units.DataSize.Unit.GIGABYTE;
 import static io.airlift.units.DataSize.Unit.MEGABYTE;
 import static io.trino.execution.QueryState.FAILED;
+import static io.trino.execution.QueryState.FINISHED;
 import static io.trino.execution.QueryState.QUEUED;
 import static io.trino.execution.QueryState.RUNNING;
 import static io.trino.spi.resourcegroups.ResourceGroupState.CAN_QUEUE;
@@ -232,6 +233,161 @@ public class TestResourceGroups
         query1.complete();
         assertThat(query2.getState()).isEqualTo(RUNNING);
         assertThat(query3.getState()).isEqualTo(RUNNING);
+    }
+
+    @Test
+    @Timeout(10)
+    public void testDuneWeightedSubGroup()
+    {
+        InternalResourceGroup root = new InternalResourceGroup("root", (group, export) -> {}, directExecutor(), true);
+        InternalResourceGroup child = root.getOrCreateSubGroup("child");
+        child.setSchedulingWeight(2);
+        child.setHardConcurrencyLimit(2);
+        root.setHardConcurrencyLimit(2);
+        root.setMaxQueuedQueries(0);
+        child.setMaxQueuedQueries(0);
+
+        MockManagedQueryExecution query1 = new MockManagedQueryExecutionBuilder().build();
+        child.run(query1);
+        assertThat(query1.getState()).isEqualTo(RUNNING);
+        MockManagedQueryExecution query2 = new MockManagedQueryExecutionBuilder().build();
+        child.run(query2);
+        assertThat(query2.getState()).isEqualTo(FAILED);
+    }
+
+    @Test
+    @Timeout(10)
+    public void testDuneTwoWeightedSubGroups()
+    {
+        InternalResourceGroup root = new InternalResourceGroup("root", (group, export) -> {}, directExecutor(), true);
+        InternalResourceGroup child1 = root.getOrCreateSubGroup("child1");
+        InternalResourceGroup child2 = root.getOrCreateSubGroup("child2");
+        child1.setSchedulingWeight(2);
+        child1.setHardConcurrencyLimit(2);
+        child2.setHardConcurrencyLimit(2);
+        root.setHardConcurrencyLimit(4);
+        root.setMaxQueuedQueries(0);
+        child1.setMaxQueuedQueries(0);
+        child2.setMaxQueuedQueries(0);
+
+        MockManagedQueryExecution query1 = new MockManagedQueryExecutionBuilder().build();
+        child1.run(query1);
+        assertThat(query1.getState()).isEqualTo(RUNNING);
+        MockManagedQueryExecution query2 = new MockManagedQueryExecutionBuilder().build();
+        child1.run(query2);
+        assertThat(query2.getState()).isEqualTo(RUNNING);
+
+        MockManagedQueryExecution query3 = new MockManagedQueryExecutionBuilder().build();
+        child2.run(query3);
+        assertThat(query3.getState()).isEqualTo(FAILED);
+
+        query1.complete();
+        assertThat(query1.getState()).isEqualTo(FINISHED);
+
+        child2.run(query3);
+        assertThat(query3.getState()).isEqualTo(RUNNING);
+
+        MockManagedQueryExecution query4 = new MockManagedQueryExecutionBuilder().build();
+        child2.run(query4);
+        assertThat(query4.getState()).isEqualTo(RUNNING);
+
+        MockManagedQueryExecution query5 = new MockManagedQueryExecutionBuilder().build();
+        child2.run(query5);
+        assertThat(query5.getState()).isEqualTo(FAILED);
+    }
+
+    @Test
+    @Timeout(10)
+    public void testDuneWeightedSubGroupsFuzzNoLeaks()
+    {
+        InternalResourceGroup root = new InternalResourceGroup("root", (group, export) -> {}, directExecutor(), true);
+        InternalResourceGroup child1 = root.getOrCreateSubGroup("child1");
+        InternalResourceGroup child2 = root.getOrCreateSubGroup("child2");
+        child1.setSchedulingWeight(2);
+        child1.setHardConcurrencyLimit(100);
+        child2.setHardConcurrencyLimit(100);
+        root.setHardConcurrencyLimit(6);
+        root.setMaxQueuedQueries(0);
+        child1.setMaxQueuedQueries(0);
+        child2.setMaxQueuedQueries(0);
+
+        ArrayList<MockManagedQueryExecution> queries = new ArrayList<>();
+
+        Runnable verifyClusterFullInvariants = () -> assertThat(2 * child1.getRunningQueries() + child2.getRunningQueries())
+                .isIn(root.getHardConcurrencyLimit(), root.getHardConcurrencyLimit() + 1);
+        Runnable verifyInvariants = () -> {
+            assertThat(2 * child1.getRunningQueries() + child2.getRunningQueries()).isLessThanOrEqualTo(root.getHardConcurrencyLimit() + 1);
+            assertThat(queries.size()).isEqualTo(child1.getRunningQueries() + child2.getRunningQueries());
+            assertThat(root.getRunningQueries()).isEqualTo(2 * child1.getRunningQueries() + child2.getRunningQueries());
+            assertThat(0).isEqualTo(root.getQueuedQueries());
+            assertThat(0).isEqualTo(root.getWaitingQueuedQueries());
+        };
+
+        long seed = System.currentTimeMillis();
+        Random random = new Random(seed);
+        try {
+            for (int i = 0; i < 10000; i++) {
+                int numChoices = 6;
+                int choice = ((random.nextInt() % numChoices) + numChoices) % numChoices;
+                switch (choice) {
+                    case 4: // Give preference to adding new queries
+                    case 0: {
+                        MockManagedQueryExecution query = new MockManagedQueryExecutionBuilder().build();
+                        child1.run(query);
+                        if (query.getState() == RUNNING) {
+                            queries.add(query);
+                        }
+                        else {
+                            assertThat(FAILED).isEqualTo(query.getState());
+                            verifyClusterFullInvariants.run();
+                        }
+                        break;
+                    }
+                    case 5:
+                    case 1: {
+                        MockManagedQueryExecution query = new MockManagedQueryExecutionBuilder().build();
+                        child2.run(query);
+                        if (query.getState() == RUNNING) {
+                            queries.add(query);
+                        }
+                        else {
+                            assertThat(FAILED).isEqualTo(query.getState());
+                            verifyClusterFullInvariants.run();
+                        }
+                        break;
+                    }
+                    case 2: {
+                        if (queries.size() > 0) {
+                            MockManagedQueryExecution query = queries.remove(queries.size() - 1);
+                            assertThat(query.getState()).isEqualTo(RUNNING);
+                            query.complete();
+                        }
+                        break;
+                    }
+                    case 3: {
+                        if (queries.size() > 0) {
+                            MockManagedQueryExecution query = queries.remove(queries.size() - 1);
+                            assertThat(query.getState()).isEqualTo(RUNNING);
+                            query.fail(new IllegalArgumentException());
+                        }
+                        break;
+                    }
+                }
+                verifyInvariants.run();
+            }
+        }
+        catch (AssertionError e) {
+            System.out.println("Test failed with seed: " + seed);
+            throw e;
+        }
+        // Finish all queries and verify no running queries
+        while (!queries.isEmpty()) {
+            queries.remove(queries.size() - 1).complete();
+            verifyInvariants.run();
+        }
+        assertThat(0).isEqualTo(child1.getRunningQueries());
+        assertThat(0).isEqualTo(child2.getRunningQueries());
+        assertThat(0).isEqualTo(root.getRunningQueries());
     }
 
     @Test

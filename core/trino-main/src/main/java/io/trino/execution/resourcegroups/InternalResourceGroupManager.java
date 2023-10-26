@@ -70,6 +70,7 @@ public final class InternalResourceGroupManager<C>
 
     private static final File CONFIG_FILE = new File("etc/resource-groups.properties");
     private static final String NAME_PROPERTY = "resource-groups.configuration-manager";
+    private static final String DUNE_USE_WEIGHTED_QUERIES = "resource-groups.dune-use-weighted-queries";
 
     private final ScheduledExecutorService refreshExecutor = newSingleThreadScheduledExecutor(daemonThreadsNamed("ResourceGroupManager"));
     private final List<InternalResourceGroup> rootGroups = new CopyOnWriteArrayList<>();
@@ -82,6 +83,7 @@ public final class InternalResourceGroupManager<C>
     private final AtomicLong lastCpuQuotaGenerationNanos = new AtomicLong(System.nanoTime());
     private final Map<String, ResourceGroupConfigurationManagerFactory> configurationManagerFactories = new ConcurrentHashMap<>();
     private final SecretsResolver secretsResolver;
+    private final AtomicBoolean duneUseWeightedQueries = new AtomicBoolean();
 
     @Inject
     public InternalResourceGroupManager(
@@ -149,6 +151,7 @@ public final class InternalResourceGroupManager<C>
         Map<String, String> properties = new HashMap<>(loadPropertiesFrom(configFile.getPath()));
 
         String name = properties.remove(NAME_PROPERTY);
+        duneUseWeightedQueries.set(Boolean.parseBoolean(properties.remove(DUNE_USE_WEIGHTED_QUERIES)));
         checkState(!isNullOrEmpty(name), "Resource groups configuration %s does not contain '%s'", configFile, NAME_PROPERTY);
 
         setConfigurationManager(name, properties);
@@ -242,7 +245,7 @@ public final class InternalResourceGroupManager<C>
                 group = parent.getOrCreateSubGroup(id.getLastSegment());
             }
             else {
-                InternalResourceGroup root = new InternalResourceGroup(id.getSegments().get(0), this::exportGroup, executor);
+                InternalResourceGroup root = new InternalResourceGroup(id.getSegments().get(0), this::exportGroup, executor, duneUseWeightedQueries.get());
                 group = root;
                 rootGroups.add(root);
             }
