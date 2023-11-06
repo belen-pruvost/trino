@@ -43,6 +43,8 @@ import io.trino.sql.ir.Expression;
 import io.trino.sql.ir.ExpressionTreeRewriter;
 import io.trino.sql.ir.IsNull;
 import io.trino.sql.ir.optimizer.IrExpressionOptimizer;
+import io.trino.type.DuneCustomTypes.Int256;
+import io.trino.type.DuneCustomTypes.Uint256;
 import io.trino.type.TypeCoercion;
 
 import java.lang.invoke.MethodHandle;
@@ -79,6 +81,8 @@ import static io.trino.sql.ir.IrExpressions.not;
 import static io.trino.sql.ir.IrUtils.and;
 import static io.trino.sql.ir.IrUtils.or;
 import static io.trino.sql.ir.optimizer.IrExpressionOptimizer.newOptimizer;
+import static io.trino.type.DuneCustomTypes.Int256.INT256;
+import static io.trino.type.DuneCustomTypes.Uint256.UINT256;
 import static java.lang.Float.intBitsToFloat;
 import static java.lang.Math.toIntExact;
 import static java.util.Objects.requireNonNull;
@@ -407,6 +411,37 @@ public class UnwrapCastInComparison
                         (source.equals(INTEGER) && (realValue > Integer.MAX_VALUE || realValue < Integer.MIN_VALUE)) ||
                         Float.isNaN(realValue) ||
                         (realValue > -1L << 23 && realValue < 1L << 23); // in (-2^23, 2^23), bigint (and integer) follows an injective implicit coercion w.r.t real
+            }
+
+            if (source.getBaseName().equals(INT256)) {
+                if (target.equals(DOUBLE)) {
+                    double doubleValue = (double) value;
+                    return doubleValue > Int256.MAX_VALUE.doubleValue() || // int256 max value rounded up
+                            doubleValue < Int256.MIN_VALUE.doubleValue() || // int256 min value rounded down
+                            Double.isNaN(doubleValue) ||
+                            (doubleValue > -1L << 53 && doubleValue < 1L << 53); // in (-2^53, 2^53), int256 follows an injective implicit coercion w.r.t double
+                }
+                if (target.equals(REAL)) {
+                    float realValue = intBitsToFloat(toIntExact((long) value));
+                    return Float.isNaN(realValue) ||
+                            (realValue > -1L << 23 && realValue < 1L << 23); // in (-2^53, 2^53), int256 follows an injective implicit coercion w.r.t double
+                }
+            }
+
+            if (source.getBaseName().equals(UINT256)) {
+                if (target.equals(DOUBLE)) {
+                    double doubleValue = (double) value;
+                    return doubleValue > Uint256.MAX_VALUE.doubleValue() || // uint256 max value rounded up
+                            doubleValue < Uint256.MIN_VALUE.doubleValue() || // 0
+                            Double.isNaN(doubleValue) ||
+                            (doubleValue >= 0 && doubleValue < 1L << 53); // in [0, 2^53), uint256 follows an injective implicit coercion w.r.t double
+                }
+                if (target.equals(REAL)) {
+                    float realValue = intBitsToFloat(toIntExact((long) value));
+                    return realValue < Uint256.MIN_VALUE.doubleValue() || // 0
+                            Float.isNaN(realValue) ||
+                            (realValue >= 0 && realValue < 1L << 23); // in [0, 2^53), uint256 follows an injective implicit coercion w.r.t double
+                }
             }
 
             if (source instanceof DecimalType) {

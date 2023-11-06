@@ -350,6 +350,8 @@ public final class TypeCoercion
                         JoniRegexpType.NAME,
                         JsonPathType.NAME,
                         ColorType.NAME,
+                        DuneCustomTypes.Int256.INT256,
+                        DuneCustomTypes.Uint256.UINT256,
                         CodePointsType.NAME -> Optional.of(lookupType.apply(new TypeSignature(resultTypeBase)));
                 case StandardTypes.VARCHAR -> Optional.of(createVarcharType(0));
                 case StandardTypes.CHAR -> Optional.of(createCharType(0));
@@ -363,6 +365,7 @@ public final class TypeCoercion
                 case StandardTypes.REAL -> Optional.of(REAL);
                 case StandardTypes.DOUBLE -> Optional.of(DOUBLE);
                 case StandardTypes.DECIMAL -> Optional.of(createDecimalType(3, 0));
+                case DuneCustomTypes.Int256.INT256, DuneCustomTypes.Uint256.UINT256 -> Optional.of(lookupType.apply(new TypeSignature(resultTypeBase)));
                 default -> Optional.empty();
             };
             case StandardTypes.SMALLINT -> switch (resultTypeBase) {
@@ -371,6 +374,7 @@ public final class TypeCoercion
                 case StandardTypes.REAL -> Optional.of(REAL);
                 case StandardTypes.DOUBLE -> Optional.of(DOUBLE);
                 case StandardTypes.DECIMAL -> Optional.of(createDecimalType(5, 0));
+                case DuneCustomTypes.Int256.INT256, DuneCustomTypes.Uint256.UINT256 -> Optional.of(lookupType.apply(new TypeSignature(resultTypeBase)));
                 default -> Optional.empty();
             };
             case StandardTypes.INTEGER -> switch (resultTypeBase) {
@@ -378,15 +382,29 @@ public final class TypeCoercion
                 case StandardTypes.REAL -> Optional.of(REAL);
                 case StandardTypes.DOUBLE -> Optional.of(DOUBLE);
                 case StandardTypes.DECIMAL -> Optional.of(createDecimalType(10, 0));
+                case DuneCustomTypes.Int256.INT256, DuneCustomTypes.Uint256.UINT256 -> Optional.of(lookupType.apply(new TypeSignature(resultTypeBase)));
                 default -> Optional.empty();
             };
             case StandardTypes.BIGINT -> switch (resultTypeBase) {
                 case StandardTypes.REAL -> Optional.of(REAL);
                 case StandardTypes.DOUBLE -> Optional.of(DOUBLE);
                 case StandardTypes.DECIMAL -> Optional.of(createDecimalType(19, 0));
+                case DuneCustomTypes.Int256.INT256, DuneCustomTypes.Uint256.UINT256 -> Optional.of(lookupType.apply(new TypeSignature(resultTypeBase)));
                 default -> Optional.empty();
             };
             case StandardTypes.DECIMAL -> switch (resultTypeBase) {
+                case StandardTypes.REAL -> Optional.of(REAL);
+                case StandardTypes.DOUBLE -> Optional.of(DOUBLE);
+                case DuneCustomTypes.Int256.INT256, DuneCustomTypes.Uint256.UINT256 -> Optional.of(lookupType.apply(new TypeSignature(resultTypeBase)));
+                default -> Optional.empty();
+            };
+            case DuneCustomTypes.Uint256.UINT256 -> switch (resultTypeBase) {
+                case StandardTypes.REAL -> Optional.of(REAL);
+                case StandardTypes.DOUBLE -> Optional.of(DOUBLE);
+                case DuneCustomTypes.Int256.INT256 -> Optional.of(lookupType.apply(new TypeSignature(resultTypeBase)));
+                default -> Optional.empty();
+            };
+            case DuneCustomTypes.Int256.INT256 -> switch (resultTypeBase) {
                 case StandardTypes.REAL -> Optional.of(REAL);
                 case StandardTypes.DOUBLE -> Optional.of(DOUBLE);
                 default -> Optional.empty();
