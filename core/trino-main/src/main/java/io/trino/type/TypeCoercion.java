@@ -395,18 +395,21 @@ public final class TypeCoercion
             case StandardTypes.DECIMAL -> switch (resultTypeBase) {
                 case StandardTypes.REAL -> Optional.of(REAL);
                 case StandardTypes.DOUBLE -> Optional.of(DOUBLE);
-                case DuneCustomTypes.Int256.INT256, DuneCustomTypes.Uint256.UINT256 -> Optional.of(lookupType.apply(new TypeSignature(resultTypeBase)));
+                case DuneCustomTypes.Int256.INT256, DuneCustomTypes.Uint256.UINT256 -> {
+                    if (((DecimalType) sourceType).getScale() == 0) {
+                        yield Optional.of(lookupType.apply(new TypeSignature(resultTypeBase)));
+                    }
+                    yield Optional.of(DOUBLE);
+                }
                 default -> Optional.empty();
             };
             case DuneCustomTypes.Uint256.UINT256 -> switch (resultTypeBase) {
-                case StandardTypes.REAL -> Optional.of(REAL);
-                case StandardTypes.DOUBLE -> Optional.of(DOUBLE);
+                case StandardTypes.REAL, StandardTypes.DOUBLE -> Optional.of(DOUBLE);
                 case DuneCustomTypes.Int256.INT256 -> Optional.of(lookupType.apply(new TypeSignature(resultTypeBase)));
                 default -> Optional.empty();
             };
             case DuneCustomTypes.Int256.INT256 -> switch (resultTypeBase) {
-                case StandardTypes.REAL -> Optional.of(REAL);
-                case StandardTypes.DOUBLE -> Optional.of(DOUBLE);
+                case StandardTypes.REAL, StandardTypes.DOUBLE -> Optional.of(DOUBLE);
                 default -> Optional.empty();
             };
             case StandardTypes.REAL -> switch (resultTypeBase) {
