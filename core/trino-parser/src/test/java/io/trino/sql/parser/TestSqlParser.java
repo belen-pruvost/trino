@@ -396,6 +396,21 @@ public class TestSqlParser
     }
 
     @Test
+    public void test0xLiteral()
+    {
+        NodeLocation location = new NodeLocation(1, 1);
+        assertThat(expression("0x")).isEqualTo(new BinaryLiteral(location, ""));
+        assertThat(expression("0xabCD")).isEqualTo(new BinaryLiteral(location, "abcd"));
+        assertThat(expression("0xabcdef1234567890ABCDEF")).isEqualTo(new BinaryLiteral(location, "abcdef1234567890ABCDEF"));
+
+        assertInvalidExpression("0xa", "Binary literal must contain an even number of digits");
+        assertInvalidExpression("0x1g", "Binary literal can only contain hexadecimal digits");
+        assertInvalidExpression("0xhello", "Binary literal can only contain hexadecimal digits");
+        assertInvalidExpression("0a", "identifiers must not start with a digit; surround the identifier with double quotes");
+        assertInvalidExpression("0y12", "identifiers must not start with a digit; surround the identifier with double quotes");
+    }
+
+    @Test
     public void testLiterals()
     {
         NodeLocation location = new NodeLocation(1, 1);
@@ -478,6 +493,7 @@ public class TestSqlParser
         assertThatThrownBy(() -> SQL_PARSER.createExpression("123_456._789_0123"))
                 .isInstanceOf(ParsingException.class);
 
+        /** We treat hexadecimal as binary
         assertThat(expression("0x123_abc_def"))
                 .isEqualTo(new LongLiteral(new NodeLocation(1, 1), "0x123_abc_def"))
                 .satisfies(value -> assertThat(((LongLiteral) value).getParsedValue()).isEqualTo(4893429231L));
@@ -488,6 +504,7 @@ public class TestSqlParser
 
         assertThatThrownBy(() -> SQL_PARSER.createExpression("0x123_ABC_DEF_"))
                 .isInstanceOf(ParsingException.class);
+         */
 
         assertThat(expression("0O012_345"))
                 .isEqualTo(new LongLiteral(new NodeLocation(1, 1), "0O012_345"))

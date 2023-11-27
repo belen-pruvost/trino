@@ -225,17 +225,6 @@ public class SqlParser
         }
 
         @Override
-        public void exitDigitIdentifier(SqlBaseParser.DigitIdentifierContext context)
-        {
-            Token token = context.DIGIT_IDENTIFIER().getSymbol();
-            throw new ParsingException(
-                    "identifiers must not start with a digit; surround the identifier with double quotes",
-                    null,
-                    token.getLine(),
-                    token.getCharPositionInLine() + 1);
-        }
-
-        @Override
         public void exitNonReserved(SqlBaseParser.NonReservedContext context)
         {
             // we can't modify the tree during rule enter/exit event handling unless we're dealing with a terminal.

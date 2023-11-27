@@ -3258,6 +3258,23 @@ class AstBuilder
         return new BinaryLiteral(getLocation(context), unquote(raw.substring(1)));
     }
 
+    // Dune-specific: we support 0x literals as binary
+    @Override
+    public Node visitDigitIdentifier(SqlBaseParser.DigitIdentifierContext context)
+    {
+        String raw = context.DIGIT_IDENTIFIER().getText();
+        if (!raw.startsWith("0x")) {
+            // The user must have tried to use a digit identifier. Throw the usual exception.
+            Token token = context.DIGIT_IDENTIFIER().getSymbol();
+            throw new ParsingException(
+                    "identifiers must not start with a digit; surround the identifier with double quotes",
+                    null,
+                    token.getLine(),
+                    token.getCharPositionInLine() + 1);
+        }
+        return new BinaryLiteral(getLocation(context), raw.substring(2));
+    }
+
     @Override
     public Node visitTypeConstructor(SqlBaseParser.TypeConstructorContext context)
     {
