@@ -115,15 +115,15 @@ public class TestDeltaLakeFileOperations
                         .addCopies(new FileOperation(DATA, "key=p1/", "InputFile.newInput"), 1)
                         .addCopies(new FileOperation(DATA, "key=p2/", "InputFile.newInput"), 1)
                         .build());
-        // reads of checkpoint and commits are not cached
+        // reads of checkpoint and commits are cached (to an extent, modulo checkpoint filtering that forces a re-read)
         assertFileSystemAccessesNoMetadataCacheFlush(
                 getSession(),
                 "SELECT * FROM test_checkpoint_file_operations",
                 ImmutableMultiset.<FileOperation>builder()
                         .addCopies(new FileOperation(LAST_CHECKPOINT, "_last_checkpoint", "InputFile.newStream"), 1)
                         .addCopies(new FileOperation(TRANSACTION_LOG_JSON, "00000000000000000003.json", "InputFile.newStream"), 1)
-                        .addCopies(new FileOperation(CHECKPOINT, "00000000000000000002.checkpoint.parquet", "InputFile.newInput"), 2)
-                        .addCopies(new FileOperation(CHECKPOINT, "00000000000000000002.checkpoint.parquet", "InputFile.length"), 2)
+                        .addCopies(new FileOperation(CHECKPOINT, "00000000000000000002.checkpoint.parquet", "InputFile.newInput"), 1)
+                        .addCopies(new FileOperation(CHECKPOINT, "00000000000000000002.checkpoint.parquet", "InputFile.length"), 1)
                         .addCopies(new FileOperation(DATA, "key=p1/", "InputFile.newInput"), 1)
                         .addCopies(new FileOperation(DATA, "key=p2/", "InputFile.newInput"), 1)
                         .build());
@@ -133,8 +133,8 @@ public class TestDeltaLakeFileOperations
                 "SELECT * FROM test_checkpoint_file_operations",
                 ImmutableMultiset.<FileOperation>builder()
                         .addCopies(new FileOperation(LAST_CHECKPOINT, "_last_checkpoint", "InputFile.newStream"), 1)
-                        .addCopies(new FileOperation(CHECKPOINT, "00000000000000000002.checkpoint.parquet", "InputFile.newInput"), 2)
-                        .addCopies(new FileOperation(CHECKPOINT, "00000000000000000002.checkpoint.parquet", "InputFile.length"), 2)
+                        .addCopies(new FileOperation(CHECKPOINT, "00000000000000000002.checkpoint.parquet", "InputFile.newInput"), 1)
+                        .addCopies(new FileOperation(CHECKPOINT, "00000000000000000002.checkpoint.parquet", "InputFile.length"), 1)
                         .addCopies(new FileOperation(TRANSACTION_LOG_JSON, "00000000000000000003.json", "InputFile.newStream"), 1)
                         .addCopies(new FileOperation(TRANSACTION_LOG_JSON, "00000000000000000004.json", "InputFile.newStream"), 1)
                         .addCopies(new FileOperation(DATA, "key=p1/", "InputFile.newInput"), 1)
@@ -146,8 +146,8 @@ public class TestDeltaLakeFileOperations
                 "SELECT * FROM test_checkpoint_file_operations",
                 ImmutableMultiset.<FileOperation>builder()
                         .addCopies(new FileOperation(LAST_CHECKPOINT, "_last_checkpoint", "InputFile.newStream"), 1)
-                        .addCopies(new FileOperation(CHECKPOINT, "00000000000000000002.checkpoint.parquet", "InputFile.newInput"), 2)
-                        .addCopies(new FileOperation(CHECKPOINT, "00000000000000000002.checkpoint.parquet", "InputFile.length"), 2)
+                        .addCopies(new FileOperation(CHECKPOINT, "00000000000000000002.checkpoint.parquet", "InputFile.newInput"), 1)
+                        .addCopies(new FileOperation(CHECKPOINT, "00000000000000000002.checkpoint.parquet", "InputFile.length"), 1)
                         .addCopies(new FileOperation(TRANSACTION_LOG_JSON, "00000000000000000004.json", "InputFile.newStream"), 1)
                         .addCopies(new FileOperation(DATA, "key=p1/", "InputFile.newInput"), 1)
                         .addCopies(new FileOperation(DATA, "key=p2/", "InputFile.newInput"), 1)
