@@ -37,17 +37,22 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.OptionalInt;
 import java.util.Random;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Supplier;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.collect.ImmutableSet.toImmutableSet;
-import static io.trino.SystemSessionProperties.getDuneMaxWorkerNodes;
+import static io.trino.SystemSessionProperties.getDuneMaxWorkerNodesPerDataShard;
+import static io.trino.SystemSessionProperties.getDuneWorkerNodesModulus;
 import static io.trino.SystemSessionProperties.getDuneWorkerNodesShuffleSeed;
 import static io.trino.SystemSessionProperties.getMaxUnacknowledgedSplitsPerTask;
 import static io.trino.cache.CacheUtils.uncheckedCacheGet;
@@ -118,17 +123,18 @@ public class UniformNodeSelectorFactory
         // this supplier is thread-safe. TODO: this logic should probably move to the scheduler since the choice of which node to run in should be
         // done as close to when the split is about to be scheduled
         Supplier<NodeMap> nodeMap;
-        OptionalInt optionalMaxWorkerNodes = getDuneMaxWorkerNodes(session);
-        if (optionalMaxWorkerNodes.isPresent()) {
-            int maxWorkerNodes = optionalMaxWorkerNodes.orElseThrow();
-            int workerShuffleSeed = getDuneWorkerNodesShuffleSeed(session);
+        OptionalInt optionalMaxWorkerNodesPerDataShard = getDuneMaxWorkerNodesPerDataShard(session);
+        if (optionalMaxWorkerNodesPerDataShard.isPresent()) {
+            int maxWorkerNodesPerDataShard = optionalMaxWorkerNodesPerDataShard.orElseThrow();
+            long workerNodesShuffleSeed = getDuneWorkerNodesShuffleSeed(session);
+            int workerNodesModulus = getDuneWorkerNodesModulus(session);
             if (nodeMapMemoizationDuration.toMillis() > 0) {
                 nodeMap = Suppliers.memoizeWithExpiration(
-                        () -> createNodeMap(catalogHandle, maxWorkerNodes, workerShuffleSeed),
+                        () -> createNodeMap(catalogHandle, maxWorkerNodesPerDataShard, workerNodesShuffleSeed, workerNodesModulus),
                         nodeMapMemoizationDuration.toMillis(), MILLISECONDS);
             }
             else {
-                nodeMap = () -> createNodeMap(catalogHandle, maxWorkerNodes, workerShuffleSeed);
+                nodeMap = () -> createNodeMap(catalogHandle, maxWorkerNodesPerDataShard, workerNodesShuffleSeed, workerNodesModulus);
             }
         }
         else {
@@ -183,7 +189,7 @@ public class UniformNodeSelectorFactory
         return new NodeMap(byHostAndPort.build(), byHost.build(), ImmutableSetMultimap.of(), coordinatorNodeIds);
     }
 
-    private NodeMap createNodeMap(Optional<CatalogHandle> catalogHandle, int maxWorkerNodes, int workerNodeShuffleSeed)
+    private NodeMap createNodeMap(Optional<CatalogHandle> catalogHandle, int maxWorkerNodes, long workerNodeShuffleSeed, int modulus)
     {
         Set<InternalNode> nodes = catalogHandle
                 .map(nodeManager::getActiveCatalogNodes)
@@ -193,7 +199,7 @@ public class UniformNodeSelectorFactory
         // Sort set to make node selection deterministic based on the seed
         List<InternalNode> workers = new ArrayList<>(nodes.stream().filter(node -> !node.isCoordinator()).sorted(Comparator.comparing(InternalNode::getNodeIdentifier)).toList());
         Collections.shuffle(workers, new Random(workerNodeShuffleSeed));
-        nodes = Streams.concat(coordinators, workers.stream().limit(maxWorkerNodes)).collect(toImmutableSet());
+        nodes = Streams.concat(coordinators, group(modulus, workers).values().stream().flatMap(group -> group.limit(maxWorkerNodes))).collect(toImmutableSet());
 
         Set<String> coordinatorNodeIds = nodeManager.getCoordinators().stream()
                 .map(InternalNode::getNodeIdentifier)
@@ -223,5 +229,41 @@ public class UniformNodeSelectorFactory
     {
         Object marker = new Object();
         return uncheckedCacheGet(inaccessibleNodeLogCache, node, () -> marker) == marker;
+    }
+
+    private static Map<Integer, Stream<InternalNode>> group(int modulus, List<InternalNode> workerNodes)
+    {
+        return workerNodes.stream()
+                .collect(Collectors.toUnmodifiableMap(n ->
+                                parseWorkerNumber(n.getNodeIdentifier())
+                                        .map(number -> number % modulus)
+                                        .orElse(modulus),
+                        Stream::of, Streams::concat));
+    }
+
+    private static final Pattern nodeNumberPattern = Pattern.compile(".*-workers-(\\d+)-\\d+");
+
+    /**
+     * Relies on https://github.com/duneanalytics/arrakis-jobs/blob/85c4272b06a1beb25fa7fc2cfa654c1a9893568e/query/trino/image/src/main/jib/app/scripts/entrypoint.sh#L18
+     * and the naming convention of kubernetes nodes.
+     * <p>
+     * Example: nodeIdentifier="paid-10u-y3mzc-1-workers-4-1699782434" -> 4
+     */
+    private static Optional<Integer> parseWorkerNumber(String nodeIdentifier)
+    {
+        Matcher match = nodeNumberPattern.matcher(nodeIdentifier);
+        if (match.matches()) {
+            try {
+                return Optional.of(Integer.parseInt(match.group(1)));
+            }
+            catch (NumberFormatException e) {
+                LOG.warn(e, "Failed to parse node identifier '%s'", nodeIdentifier);
+                return Optional.empty();
+            }
+        }
+        else {
+            LOG.warn("Failed to parse node identifier '%s'", nodeIdentifier);
+            return Optional.empty();
+        }
     }
 }

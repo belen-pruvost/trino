@@ -42,6 +42,7 @@ public class TestNodeSchedulerConfig
                 .setIncludeCoordinator(true)
                 .setSplitsBalancingPolicy(NodeSchedulerConfig.SplitsBalancingPolicy.STAGE)
                 .setOptimizedLocalScheduling(true)
+                .setDuneSchedulingWorkerNodeModulus(Integer.MAX_VALUE)
                 .setAllowedNoMatchingNodePeriod(new Duration(2, MINUTES))
                 .setExhaustedNodeWaitPeriod(new Duration(2, MINUTES)));
     }
@@ -60,6 +61,7 @@ public class TestNodeSchedulerConfig
                 .put("node-scheduler.splits-balancing-policy", "node")
                 .put("node-scheduler.optimized-local-scheduling", "false")
                 .put("node-scheduler.allowed-no-matching-node-period", "1m")
+                .put("node-scheduler.dune.worker-node-modulus", "1")
                 .put("node-scheduler.exhausted-node-wait-period", "3m")
                 .buildOrThrow();
 
@@ -73,6 +75,7 @@ public class TestNodeSchedulerConfig
                 .setMinCandidates(11)
                 .setSplitsBalancingPolicy(NODE)
                 .setOptimizedLocalScheduling(false)
+                .setDuneSchedulingWorkerNodeModulus(1)
                 .setAllowedNoMatchingNodePeriod(new Duration(1, MINUTES))
                 .setExhaustedNodeWaitPeriod(new Duration(3, MINUTES));
 

@@ -54,6 +54,7 @@ public class NodeSchedulerConfig
     private int maxUnacknowledgedSplitsPerTask = 2000;
     private Duration allowedNoMatchingNodePeriod = new Duration(2, TimeUnit.MINUTES);
     private Duration exhaustedNodeWaitPeriod = new Duration(2, TimeUnit.MINUTES);
+    private int duneSchedulingWorkerNodeModulus = Integer.MAX_VALUE;
 
     @NotNull
     public NodeSchedulerPolicy getNodeSchedulerPolicy()
@@ -208,5 +209,18 @@ public class NodeSchedulerConfig
     public Duration getExhaustedNodeWaitPeriod()
     {
         return exhaustedNodeWaitPeriod;
+    }
+
+    public int getDuneSchedulingWorkerNodeModulus()
+    {
+        return duneSchedulingWorkerNodeModulus;
+    }
+
+    @Config("node-scheduler.dune.worker-node-modulus")
+    @ConfigDescription("Modulus to use when grouping workers by node id")
+    public NodeSchedulerConfig setDuneSchedulingWorkerNodeModulus(int duneSchedulingWorkerNodeModulus)
+    {
+        this.duneSchedulingWorkerNodeModulus = duneSchedulingWorkerNodeModulus;
+        return this;
     }
 }
