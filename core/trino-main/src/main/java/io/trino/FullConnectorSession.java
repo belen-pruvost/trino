@@ -121,7 +121,7 @@ public class FullConnectorSession
             throw new TrinoException(INVALID_SESSION_PROPERTY, format("Unknown session property: %s.%s", catalogName, propertyName));
         }
 
-        return sessionPropertyManager.decodeCatalogPropertyValue(catalogHandle, catalogName, propertyName, properties.get(propertyName), type);
+        return sessionPropertyManager.decodeCatalogPropertyValue(catalogHandle.getRootCatalogHandle(), catalogName, propertyName, properties.get(propertyName), type);
     }
 
     @Override

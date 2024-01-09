@@ -2130,6 +2130,21 @@ public abstract class BaseDeltaLakeConnectorSmokeTest
         }
     }
 
+    @Test
+    public void testSizeTable()
+    {
+        String tableName = "test_size_table_" + randomNameSuffix();
+        try (TestTable table = new TestTable(getQueryRunner()::execute, tableName, "(int_col INTEGER)")) {
+            assertQuery("SELECT size_bytes FROM \"" + table.getName() + "$size\"", "VALUES 0");
+            assertUpdate("INSERT INTO " + table.getName() + " VALUES 1, 2, 3", 3);
+            assertQuery("SELECT size_bytes FROM \"" + table.getName() + "$size\"", "VALUES 219");
+            assertUpdate("DELETE FROM " + table.getName() + " WHERE int_col > 1", 2);
+            assertQuery("SELECT size_bytes FROM \"" + table.getName() + "$size\"", "VALUES 211");
+            assertUpdate("DELETE FROM " + table.getName(), 1);
+            assertQuery("SELECT size_bytes FROM \"" + table.getName() + "$size\"", "VALUES 0");
+        }
+    }
+
     /**
      * @see BaseDeltaLakeRegisterTableProcedureTest for more detailed tests
      */

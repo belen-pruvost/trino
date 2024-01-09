@@ -97,6 +97,13 @@ public abstract class BaseDeltaLakeSharedMetastoreWithTableRedirectionsTest
     }
 
     @Test
+    public void testSizeTable()
+    {
+        assertThat(query("SELECT * FROM delta_with_redirections." + schema + ".\"delta_table$size\""))
+                .matches("SELECT * FROM hive_with_redirections." + schema + ".\"delta_table$size\"");
+    }
+
+    @Test
     public void testPartitionsTable()
     {
         assertThat(query("SELECT * FROM delta_with_redirections." + schema + ".\"delta_table$partitions\""))

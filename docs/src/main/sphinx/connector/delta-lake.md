@@ -876,6 +876,25 @@ delta.columnMapping.mode    | name            |
 delta.feature.columnMapping | supported       |
 ```
 
+##### `$size` table
+
+The `$size` table returns the storage size of a table, being the
+summed size of all table's files.
+
+You can retrieve the size of the Delta
+table `test_table` by using the following query:
+
+```
+SELECT * FROM "test_table$size"
+```
+
+```text
+ size_bytes         |
+--------------------+
+656                 |
+
+```
+
 (delta-lake-special-columns)=
 #### Metadata columns
 

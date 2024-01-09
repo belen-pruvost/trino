@@ -147,6 +147,48 @@ public class TestDeltaLakeSystemTables
     }
 
     @Test
+    public void testSizeTable()
+    {
+        String tableName = "test_simple_size_table";
+        try {
+            // empty table
+            assertUpdate("CREATE TABLE " + tableName + " (_bigint BIGINT, _boolean BOOLEAN)");
+            assertQuery("SELECT size_bytes FROM \"" + tableName + "$size\"", "VALUES CAST(0 AS BIGINT)");
+            assertQuery("SELECT sum(\"$file_size\") FROM (SELECT DISTINCT \"$path\", \"$file_size\" FROM \"" + tableName + "\")", "VALUES CAST(null AS BIGINT)");
+
+            // insert one record. creates the first file
+            assertUpdate("INSERT INTO \"" + tableName + "\" VALUES (1, false)", 1);
+            assertQuery("SELECT * FROM \"" + tableName + "$size\"", "VALUES CAST(332 AS BIGINT)");
+            assertQuery("SELECT sum(\"$file_size\") FROM (SELECT DISTINCT \"$path\", \"$file_size\" FROM \"" + tableName + "\")", "VALUES CAST(332 AS BIGINT)");
+
+            // insert more records. creates the second file
+            assertUpdate("INSERT INTO \"" + tableName + "\" VALUES (2, false), (3, true), (4, true), (5, true)", 4);
+            assertQuery("SELECT * FROM \"" + tableName + "$size\"", "VALUES CAST(686 AS BIGINT)");
+            assertQuery("SELECT sum(\"$file_size\") FROM (SELECT DISTINCT \"$path\", \"$file_size\" FROM \"" + tableName + "\")", "VALUES CAST(686 AS BIGINT)");
+
+            // remove some records from the second file
+            assertUpdate("DELETE FROM \"" + tableName + "\" WHERE _boolean", 3);
+            assertQuery("SELECT * FROM \"" + tableName + "$size\"", "VALUES CAST(664 AS BIGINT)");
+            assertQuery("SELECT sum(\"$file_size\") FROM (SELECT DISTINCT \"$path\", \"$file_size\" FROM \"" + tableName + "\")", "VALUES CAST(664 AS BIGINT)");
+
+            // remove remaining records from the table
+            assertUpdate("DELETE FROM \"" + tableName + "\"", 2);
+            assertQuery("SELECT * FROM \"" + tableName + "$size\"", "VALUES CAST(0 AS BIGINT)");
+            assertQuery("SELECT sum(\"$file_size\") FROM (SELECT DISTINCT \"$path\", \"$file_size\" FROM \"" + tableName + "\")", "VALUES CAST(null AS BIGINT)");
+
+            // call $size on a metadata table test_simple_size_table$size
+            assertQueryFails("SELECT * FROM \"" + tableName + "$size$size\"", "line 1:15: Table 'delta.tpch.\"test_simple_size_table\\$size\\$size\"' does not exist");
+
+            // call $size on non-existing table
+            assertUpdate("DROP TABLE " + tableName);
+            assertQueryFails("SELECT * FROM \"" + tableName + "$size\"", "line 1:15: Table 'delta.tpch.\"test_simple_size_table\\$size\"' does not exist");
+        }
+        finally {
+            assertUpdate("DROP TABLE IF EXISTS " + tableName);
+        }
+    }
+
+    @Test
     public void testPartitionsTable()
     {
         String tableName = "test_simple_partitions_table_" + randomNameSuffix();
