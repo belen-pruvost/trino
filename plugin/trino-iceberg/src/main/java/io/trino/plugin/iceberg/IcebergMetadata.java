@@ -648,6 +648,7 @@ public class IcebergMetadata
         }
 
         TableType tableType = IcebergTableName.tableTypeFrom(tableName.getTableName());
+        SchemaTableName systemTableName = new SchemaTableName(tableName.getSchemaName(), IcebergTableName.tableNameWithType(name, tableType));
         return switch (tableType) {
             case DATA, MATERIALIZED_VIEW_STORAGE -> throw new VerifyException("Unexpected table type: " + tableType); // Handled above.
             case HISTORY -> Optional.of(new HistoryTable(tableName, table));
@@ -659,6 +660,7 @@ public class IcebergMetadata
             case FILES -> Optional.of(new FilesTable(tableName, typeManager, table, getCurrentSnapshotId(table)));
             case PROPERTIES -> Optional.of(new PropertiesTable(tableName, table));
             case REFS -> Optional.of(new RefsTable(tableName, table));
+            case METADATA_FILE_NAME -> Optional.of(new MetadataFileNameTable(systemTableName, table));
         };
     }
 

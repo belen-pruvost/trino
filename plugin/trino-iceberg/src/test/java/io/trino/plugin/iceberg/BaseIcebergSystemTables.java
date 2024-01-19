@@ -549,6 +549,13 @@ public abstract class BaseIcebergSystemTables
         assertUpdate("DROP TABLE IF EXISTS test_schema.test_table_with_delete");
     }
 
+    @Test
+    public void testMetadataFileNameTable()
+    {
+        assertQuery("SELECT metadata_file_name LIKE 'local:///test_schema/test_table-%/metadata/%.metadata.json' FROM test_schema.\"test_table$metadata_file_name\"",
+                "VALUES (true)");
+    }
+
     private Long nanCount(long value)
     {
         // Parquet does not have nan count metrics

@@ -26,4 +26,5 @@ public enum TableType
     PROPERTIES,
     REFS,
     MATERIALIZED_VIEW_STORAGE,
+    METADATA_FILE_NAME,
 }
