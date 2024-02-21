@@ -18,6 +18,7 @@ import com.google.inject.Inject;
 import io.trino.dispatcher.DispatchManager;
 import io.trino.execution.QueryInfo;
 import io.trino.execution.QueryState;
+import io.trino.execution.QueryStateMachine;
 import io.trino.security.AccessControl;
 import io.trino.server.security.ResourceSecurity;
 import io.trino.spi.QueryId;
@@ -102,6 +103,27 @@ public class QueryResource
         try {
             checkCanViewQueryOwnedBy(sessionContextFactory.extractAuthorizedIdentity(servletRequest, httpHeaders), queryInfo.get().getSession().toIdentity(), accessControl);
             return Response.ok(queryInfo.get()).build();
+        }
+        catch (AccessDeniedException e) {
+            throw new ForbiddenException();
+        }
+    }
+
+    @ResourceSecurity(AUTHENTICATED_USER)
+    @GET
+    @Path("{queryId}/pruned")
+    public Response getQueryInfoPruned(@PathParam("queryId") QueryId queryId, @Context HttpServletRequest servletRequest, @Context HttpHeaders httpHeaders)
+    {
+        requireNonNull(queryId, "queryId is null");
+
+        Optional<QueryInfo> prunedQueryInfo = dispatchManager.getFullQueryInfo(queryId).map(info -> QueryStateMachine.pruneQueryInfo(info, info.getVersion()));
+
+        if (prunedQueryInfo.isEmpty()) {
+            return Response.status(Status.GONE).build();
+        }
+        try {
+            checkCanViewQueryOwnedBy(sessionContextFactory.extractAuthorizedIdentity(servletRequest, httpHeaders), prunedQueryInfo.get().getSession().toIdentity(), accessControl);
+            return Response.ok(prunedQueryInfo.get()).build();
         }
         catch (AccessDeniedException e) {
             throw new ForbiddenException();
