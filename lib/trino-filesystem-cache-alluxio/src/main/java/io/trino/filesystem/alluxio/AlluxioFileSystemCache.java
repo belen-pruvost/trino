@@ -33,6 +33,7 @@ import jakarta.annotation.PreDestroy;
 
 import java.io.IOException;
 import java.util.Collection;
+import java.util.List;
 
 import static java.nio.charset.StandardCharsets.UTF_8;
 import static java.util.Objects.requireNonNull;
@@ -45,6 +46,7 @@ public class AlluxioFileSystemCache
     private final CacheManager cacheManager;
     private final AlluxioConfiguration config;
     private final AlluxioCacheStats statistics;
+    private final List<String> denylist;
     private final HashFunction hashFunction = Hashing.murmur3_128();
 
     @Inject
@@ -54,6 +56,7 @@ public class AlluxioFileSystemCache
         this.tracer = requireNonNull(tracer, "tracer is null");
         this.config = AlluxioConfigurationFactory.create(requireNonNull(config, "config is null"));
         this.pageSize = config.getCachePageSize();
+        this.denylist = config.getDenylist();
         this.cacheManager = CacheManager.Factory.create(this.config);
         this.statistics = requireNonNull(statistics, "statistics is null");
     }
@@ -62,6 +65,9 @@ public class AlluxioFileSystemCache
     public TrinoInput cacheInput(TrinoInputFile delegate, String key)
             throws IOException
     {
+        if (uncacheable(delegate)) {
+            return delegate.newInput();
+        }
         return new AlluxioInput(tracer, delegate, key, uriStatus(delegate, key), new TracingCacheManager(tracer, key, pageSize, cacheManager), config, statistics);
     }
 
@@ -69,6 +75,9 @@ public class AlluxioFileSystemCache
     public TrinoInputStream cacheStream(TrinoInputFile delegate, String key)
             throws IOException
     {
+        if (uncacheable(delegate)) {
+            return delegate.newStream();
+        }
         return new AlluxioInputStream(tracer, delegate, key, uriStatus(delegate, key), new TracingCacheManager(tracer, key, pageSize, cacheManager), config, statistics);
     }
 
@@ -107,5 +116,11 @@ public class AlluxioFileSystemCache
                 .setLength(file.length());
         String cacheIdentifier = hashFunction.hashString(key, UTF_8).toString();
         return new URIStatus(info, CacheContext.defaults().setCacheIdentifier(cacheIdentifier));
+    }
+
+    private boolean uncacheable(TrinoInputFile file)
+    {
+        return denylist.stream()
+                .anyMatch(deny -> file.location().path().contains(deny));
     }
 }

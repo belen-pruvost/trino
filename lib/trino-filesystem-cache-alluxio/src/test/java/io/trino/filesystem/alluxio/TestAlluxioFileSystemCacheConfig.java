@@ -68,7 +68,8 @@ class TestAlluxioFileSystemCacheConfig
                 .setCachePageSize(DataSize.valueOf("1MB"))
                 .setMaxCacheSizes(ImmutableList.of())
                 .setMaxCacheDiskUsagePercentages(ImmutableList.of())
-                .setCacheTTL(Duration.valueOf("7d")));
+                .setCacheTTL(Duration.valueOf("7d"))
+                .setDenylist(null));
     }
 
     @Test
@@ -83,6 +84,7 @@ class TestAlluxioFileSystemCacheConfig
                 .put("fs.cache.max-sizes", "1GB")
                 .put("fs.cache.max-disk-usage-percentages", "50")
                 .put("fs.cache.ttl", "1d")
+                .put("fs.cache.denylist", "foo")
                 .buildOrThrow();
 
         AlluxioFileSystemCacheConfig expected = new AlluxioFileSystemCacheConfig()
@@ -90,7 +92,7 @@ class TestAlluxioFileSystemCacheConfig
                 .setCachePageSize(DataSize.valueOf("7MB"))
                 .setMaxCacheSizes(ImmutableList.of(DataSize.valueOf("1GB")))
                 .setMaxCacheDiskUsagePercentages(ImmutableList.of(50))
-                .setCacheTTL(Duration.valueOf("1d"));
+                .setDenylist(ImmutableList.of("foo"));
 
         assertFullMapping(properties, expected);
     }

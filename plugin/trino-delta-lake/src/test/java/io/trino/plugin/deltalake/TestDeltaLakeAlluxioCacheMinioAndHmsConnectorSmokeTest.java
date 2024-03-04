@@ -68,6 +68,7 @@ public class TestDeltaLakeAlluxioCacheMinioAndHmsConnectorSmokeTest
                 .put("fs.cache.enabled", "true")
                 .put("fs.cache.directories", cacheDirectory.toAbsolutePath().toString())
                 .put("fs.cache.max-sizes", "100MB")
+                .put("fs.cache.denylist", "/_delta_log/")
                 .buildOrThrow();
     }
 }

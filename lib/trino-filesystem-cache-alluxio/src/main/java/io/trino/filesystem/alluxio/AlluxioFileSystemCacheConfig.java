@@ -35,6 +35,7 @@ public class AlluxioFileSystemCacheConfig
     static final String CACHE_MAX_PERCENTAGES = "fs.cache.max-disk-usage-percentages";
 
     private List<String> cacheDirectories = ImmutableList.of();
+    private List<String> denylist = ImmutableList.of();
     private List<DataSize> maxCacheSizes = ImmutableList.of();
     private Optional<Duration> cacheTTL = Optional.of(Duration.valueOf("7d"));
     private List<Integer> maxCacheDiskUsagePercentages = ImmutableList.of();
@@ -84,6 +85,20 @@ public class AlluxioFileSystemCacheConfig
     public AlluxioFileSystemCacheConfig disableTTL()
     {
         this.cacheTTL = Optional.empty();
+        return this;
+    }
+
+    @NotNull
+    public List<String> getDenylist()
+    {
+        return denylist;
+    }
+
+    @Config("fs.cache.denylist")
+    @ConfigDescription("Comma-separated list of file name patterns that will not be cached")
+    public AlluxioFileSystemCacheConfig setDenylist(List<String> denylistParam)
+    {
+        this.denylist = ImmutableList.copyOf(denylistParam);
         return this;
     }
 
