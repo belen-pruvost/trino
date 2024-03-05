@@ -20,6 +20,8 @@ import io.airlift.configuration.AbstractConfigurationAwareModule;
 import io.trino.filesystem.cache.CachingHostAddressProvider;
 import io.trino.filesystem.cache.ConsistentHashingHostAddressProvider;
 import io.trino.filesystem.cache.ConsistentHashingHostAddressProviderConfig;
+import io.trino.filesystem.cache.GroupedConsistentHashingHostAddressProvider;
+import io.trino.filesystem.cache.GroupedConsistentHashingHostAddressProviderConfig;
 import io.trino.filesystem.cache.TrinoFileSystemCache;
 
 import java.util.Properties;
@@ -44,11 +46,19 @@ public class AlluxioFileSystemCacheModule
     {
         configBinder(binder).bindConfig(AlluxioFileSystemCacheConfig.class);
         configBinder(binder).bindConfig(ConsistentHashingHostAddressProviderConfig.class);
+        configBinder(binder).bindConfig(GroupedConsistentHashingHostAddressProviderConfig.class);
         binder.bind(AlluxioCacheStats.class).in(SINGLETON);
         newExporter(binder).export(AlluxioCacheStats.class).as(generator -> generator.generatedNameOf(AlluxioCacheStats.class));
 
         if (isCoordinator) {
-            newOptionalBinder(binder, CachingHostAddressProvider.class).setBinding().to(ConsistentHashingHostAddressProvider.class).in(SINGLETON);
+            GroupedConsistentHashingHostAddressProviderConfig config = buildConfigObject(GroupedConsistentHashingHostAddressProviderConfig.class);
+            if (config.getNodeModulus().isPresent()) {
+                binder.bind(Integer.class).annotatedWith(GroupedConsistentHashingHostAddressProvider.Modulus.class).toInstance(config.getNodeModulus().orElseThrow());
+                newOptionalBinder(binder, CachingHostAddressProvider.class).setBinding().to(GroupedConsistentHashingHostAddressProvider.class).in(SINGLETON);
+            }
+            else {
+                newOptionalBinder(binder, CachingHostAddressProvider.class).setBinding().to(ConsistentHashingHostAddressProvider.class).in(SINGLETON);
+            }
         }
         binder.bind(TrinoFileSystemCache.class).to(AlluxioFileSystemCache.class).in(SINGLETON);
 
