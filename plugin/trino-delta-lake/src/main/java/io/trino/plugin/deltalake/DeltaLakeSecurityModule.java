@@ -34,6 +34,7 @@ public class DeltaLakeSecurityModule
         READ_ONLY,
         FILE,
         SYSTEM,
+        DUNE,
         /**/
     }
 
@@ -46,6 +47,7 @@ public class DeltaLakeSecurityModule
             case FILE -> combine(new FileBasedAccessControlModule(), new StaticAccessControlMetadataModule());
             // do not bind a ConnectorAccessControl so the engine will use system security with system roles
             case SYSTEM -> EMPTY_MODULE;
+            case DUNE -> EMPTY_MODULE;
         });
     }
 
