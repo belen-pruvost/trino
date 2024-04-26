@@ -98,6 +98,64 @@ public class TestDeltaLakeFileOperations
     }
 
     @Test
+    public void testCheckpointFileOperations()
+    {
+        assertUpdate("DROP TABLE IF EXISTS test_checkpoint_file_operations");
+        assertUpdate("CREATE TABLE test_checkpoint_file_operations(key varchar, data varchar) with (checkpoint_interval = 2, partitioned_by=ARRAY['key'])");
+        assertUpdate("INSERT INTO test_checkpoint_file_operations VALUES ('p1', '1-abc')", 1);
+        assertUpdate("INSERT INTO test_checkpoint_file_operations VALUES ('p2', '2-xyz')", 1);
+        assertUpdate("CALL system.flush_metadata_cache(schema_name => CURRENT_SCHEMA, table_name => 'test_checkpoint_file_operations')");
+        assertFileSystemAccesses(
+                "SELECT * FROM test_checkpoint_file_operations",
+                ImmutableMultiset.<FileOperation>builder()
+                        .addCopies(new FileOperation(LAST_CHECKPOINT, "_last_checkpoint", "InputFile.newStream"), 1)
+                        .addCopies(new FileOperation(TRANSACTION_LOG_JSON, "00000000000000000003.json", "InputFile.newStream"), 1)
+                        .addCopies(new FileOperation(CHECKPOINT, "00000000000000000002.checkpoint.parquet", "InputFile.newInput"), 2)
+                        .addCopies(new FileOperation(CHECKPOINT, "00000000000000000002.checkpoint.parquet", "InputFile.length"), 2)
+                        .addCopies(new FileOperation(DATA, "key=p1/", "InputFile.newInput"), 1)
+                        .addCopies(new FileOperation(DATA, "key=p2/", "InputFile.newInput"), 1)
+                        .build());
+        // reads of checkpoint and commits are not cached
+        assertFileSystemAccessesNoMetadataCacheFlush(
+                getSession(),
+                "SELECT * FROM test_checkpoint_file_operations",
+                ImmutableMultiset.<FileOperation>builder()
+                        .addCopies(new FileOperation(LAST_CHECKPOINT, "_last_checkpoint", "InputFile.newStream"), 1)
+                        .addCopies(new FileOperation(TRANSACTION_LOG_JSON, "00000000000000000003.json", "InputFile.newStream"), 1)
+                        .addCopies(new FileOperation(CHECKPOINT, "00000000000000000002.checkpoint.parquet", "InputFile.newInput"), 2)
+                        .addCopies(new FileOperation(CHECKPOINT, "00000000000000000002.checkpoint.parquet", "InputFile.length"), 2)
+                        .addCopies(new FileOperation(DATA, "key=p1/", "InputFile.newInput"), 1)
+                        .addCopies(new FileOperation(DATA, "key=p2/", "InputFile.newInput"), 1)
+                        .build());
+        assertUpdate("INSERT INTO test_checkpoint_file_operations VALUES ('p3', '3-xyz')", 1);
+        assertFileSystemAccessesNoMetadataCacheFlush(
+                getSession(),
+                "SELECT * FROM test_checkpoint_file_operations",
+                ImmutableMultiset.<FileOperation>builder()
+                        .addCopies(new FileOperation(LAST_CHECKPOINT, "_last_checkpoint", "InputFile.newStream"), 1)
+                        .addCopies(new FileOperation(CHECKPOINT, "00000000000000000002.checkpoint.parquet", "InputFile.newInput"), 2)
+                        .addCopies(new FileOperation(CHECKPOINT, "00000000000000000002.checkpoint.parquet", "InputFile.length"), 2)
+                        .addCopies(new FileOperation(TRANSACTION_LOG_JSON, "00000000000000000003.json", "InputFile.newStream"), 1)
+                        .addCopies(new FileOperation(TRANSACTION_LOG_JSON, "00000000000000000004.json", "InputFile.newStream"), 1)
+                        .addCopies(new FileOperation(DATA, "key=p1/", "InputFile.newInput"), 1)
+                        .addCopies(new FileOperation(DATA, "key=p2/", "InputFile.newInput"), 1)
+                        .addCopies(new FileOperation(DATA, "key=p3/", "InputFile.newInput"), 1)
+                        .build());
+        assertFileSystemAccessesNoMetadataCacheFlush(
+                getSession(),
+                "SELECT * FROM test_checkpoint_file_operations",
+                ImmutableMultiset.<FileOperation>builder()
+                        .addCopies(new FileOperation(LAST_CHECKPOINT, "_last_checkpoint", "InputFile.newStream"), 1)
+                        .addCopies(new FileOperation(CHECKPOINT, "00000000000000000002.checkpoint.parquet", "InputFile.newInput"), 2)
+                        .addCopies(new FileOperation(CHECKPOINT, "00000000000000000002.checkpoint.parquet", "InputFile.length"), 2)
+                        .addCopies(new FileOperation(TRANSACTION_LOG_JSON, "00000000000000000004.json", "InputFile.newStream"), 1)
+                        .addCopies(new FileOperation(DATA, "key=p1/", "InputFile.newInput"), 1)
+                        .addCopies(new FileOperation(DATA, "key=p2/", "InputFile.newInput"), 1)
+                        .addCopies(new FileOperation(DATA, "key=p3/", "InputFile.newInput"), 1)
+                        .build());
+    }
+
+    @Test
     public void testCreateTableAsSelect()
     {
         assertFileSystemAccesses(
@@ -1045,7 +1103,14 @@ public class TestDeltaLakeFileOperations
     private void assertFileSystemAccesses(Session session, @Language("SQL") String query, Multiset<FileOperation> expectedAccesses)
     {
         assertUpdate("CALL system.flush_metadata_cache()");
+        assertFileSystemAccessesNoMetadataCacheFlush(session, query, expectedAccesses);
+    }
 
+    private void assertFileSystemAccessesNoMetadataCacheFlush(Session session, @Language("SQL") String query, Multiset<FileOperation> expectedAccesses)
+    {
+        // TODO FIXME
+        // Is this still working??
+        // trackingFileSystemFactory.reset();
         getDistributedQueryRunner().executeWithPlan(session, query);
         List<SpanData> spanData = getDistributedQueryRunner().getSpans();
         assertMultisetsEqual(getOperations(spanData), expectedAccesses);
@@ -1076,6 +1141,9 @@ public class TestDeltaLakeFileOperations
             }
             if (path.matches(".*/_delta_log/\\d+\\.json")) {
                 return new FileOperation(TRANSACTION_LOG_JSON, fileName, operationType);
+            }
+            if (path.matches(".*/_delta_log/\\d+\\.checkpoint.parquet")) {
+                return new FileOperation(CHECKPOINT, fileName, operationType);
             }
             if (path.matches(".*/_delta_log/_trino_meta/extended_stats.json")) {
                 return new FileOperation(TRINO_EXTENDED_STATS_JSON, fileName, operationType);
