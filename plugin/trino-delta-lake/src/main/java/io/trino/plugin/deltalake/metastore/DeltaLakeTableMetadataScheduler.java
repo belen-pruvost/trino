@@ -77,6 +77,7 @@ public class DeltaLakeTableMetadataScheduler
     private final Map<SchemaTableName, TableUpdateInfo> updateInfos = new ConcurrentHashMap<>();
     private final boolean enabled;
     private final boolean synchronous;
+    private final boolean saveOnReads;
     private final Duration scheduleInterval;
 
     private ExecutorService executor;
@@ -98,6 +99,7 @@ public class DeltaLakeTableMetadataScheduler
         requireNonNull(nodeManager, "nodeManager is null");
         this.enabled = config.isStoreTableMetadataEnabled() && nodeManager.getCurrentNode().isCoordinator();
         this.synchronous = config.isStoreTableMetadataSynchronous();
+        this.saveOnReads = config.isStoreTableMetadataOnReads();
         this.scheduleInterval = config.getStoreTableMetadataInterval();
     }
 
@@ -250,6 +252,11 @@ public class DeltaLakeTableMetadataScheduler
         return isStoreTableMetadataInMetastoreEnabled(session) &&
                 schemaString.length() <= tableParameterLengthLimit &&
                 tableComment.map(String::length).orElse(0) <= tableParameterLengthLimit;
+    }
+
+    public boolean saveOnReads()
+    {
+        return saveOnReads;
     }
 
     public static Map<String, String> tableMetadataParameters(long version, String schemaString, Optional<String> tableComment)

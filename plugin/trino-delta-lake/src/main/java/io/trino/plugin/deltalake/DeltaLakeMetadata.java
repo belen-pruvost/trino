@@ -680,10 +680,12 @@ public class DeltaLakeMetadata
         }
         verifySupportedColumnMapping(getColumnMappingMode(metadataEntry, protocolEntry));
         if (metadataScheduler.canStoreTableMetadata(session, metadataEntry.getSchemaString(), Optional.ofNullable(metadataEntry.getDescription())) &&
+                metadataScheduler.saveOnReads() &&
                 endVersion.isEmpty() &&
                 !isSameTransactionVersion(metastoreTable.get(), tableSnapshot)) {
             tableUpdateInfos.put(tableName, new TableUpdateInfo(session, tableSnapshot.getVersion(), metadataEntry.getSchemaString(), Optional.ofNullable(metadataEntry.getDescription()), metadataEntry.getConfiguration()));
         }
+
         return new DeltaLakeTableHandle(
                 tableName.getSchemaName(),
                 tableName.getTableName(),

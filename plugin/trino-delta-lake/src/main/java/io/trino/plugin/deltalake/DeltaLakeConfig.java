@@ -78,6 +78,7 @@ public class DeltaLakeConfig
     private HiveCompressionCodec compressionCodec = HiveCompressionCodec.SNAPPY;
     private long perTransactionMetastoreCacheMaximumSize = 1000;
     private boolean storeTableMetadataEnabled;
+    private boolean storeTableMetadataOnReads = true;
     private boolean storeTableMetadataSynchronous;
     private int storeTableMetadataThreads = 5;
     private Duration storeTableMetadataInterval = new Duration(1, SECONDS);
@@ -403,6 +404,19 @@ public class DeltaLakeConfig
     public boolean isStoreTableMetadataSynchronous()
     {
         return storeTableMetadataSynchronous;
+    }
+
+    @Config("delta.metastore.store-table-metadata-on-reads")
+    @ConfigDescription("Store table metadata in metastore on reads")
+    public DeltaLakeConfig setStoreTableMetadataOnReads(boolean storeTableMetadataOnReads)
+    {
+        this.storeTableMetadataOnReads = storeTableMetadataOnReads;
+        return this;
+    }
+
+    public boolean isStoreTableMetadataOnReads()
+    {
+        return storeTableMetadataOnReads;
     }
 
     @Config("delta.metastore.store-table-metadata-synchronous")
