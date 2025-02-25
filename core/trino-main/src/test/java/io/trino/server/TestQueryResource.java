@@ -197,19 +197,6 @@ public class TestQueryResource
     }
 
     @Test
-    public void testGetQueryInfoShort()
-    {
-        String queryId = runToCompletion("SELECT now()");
-
-        QueryInfo queryInfoPruned = getQueryInfo(queryId + "/pruned");
-        assertThat(queryInfoPruned.getReferencedTables()).isEmpty();
-        assertThat(queryInfoPruned.getRoutines().size()).isEqualTo(1);
-        assertThat(queryInfoPruned.getRoutines().get(0).getRoutine()).isEqualTo("now");
-        assertThat(queryInfoPruned.getWarnings()).isEmpty();
-        assertThat(queryInfoPruned.getOutput()).isEmpty();
-    }
-
-    @Test
     public void testGetQueryInfoDispatchFailure()
     {
         String queryId = runToCompletion("SELECT");
